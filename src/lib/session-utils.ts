@@ -151,7 +151,7 @@ export async function savePassage(
   body_raw: string,
   wordCount: number,
   charCount: number,
-  opts?: { source_type?: "paste" | "url" | "library"; source_url?: string; domain?: string | null; author?: string | null }
+  opts?: { source_type?: "paste" | "url" | "library" | "pdf" | "epub" | "wikipedia" | "benyehuda"; source_url?: string; domain?: string | null; author?: string | null }
 ): Promise<string> {
   const db = getDb();
   const id = crypto.randomUUID();

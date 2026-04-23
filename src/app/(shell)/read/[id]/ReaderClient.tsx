@@ -13,6 +13,7 @@ import { useAppStore } from "@/stores/app";
 import { IconCheck, IconBookmark } from "@/components/ui/Icons";
 import * as haptics from "@/lib/haptics";
 import { generateQuestions, type AIQuestion } from "@/lib/ai-questions";
+import { nakdanize, getCachedNakdan, cacheNakdan, type NakdanMap } from "@/lib/nakdan";
 import type { ProcessedPassage } from "@/types/token";
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -24,8 +25,11 @@ export default function ReaderClient({ params }: PageProps) {
   const readingMode = useRsvpStore((s) => s.readingMode);
   const setReadingMode = useRsvpStore((s) => s.setReadingMode);
   const anthropicKey = useAppStore((s) => s.anthropicKey);
+  const nikudMode = useRsvpStore((s) => s.nikudMode);
 
   const [passage, setPassage] = useState<ProcessedPassage | null>(null);
+  const [, setNakdanReady] = useState(false);
+  const [nakdanLoading, setNakdanLoading] = useState(false);
   const [passageBody, setPassageBody] = useState<string>("");
   const [demoPassage, setDemoPassage] = useState<DemoPassage | null>(null);
   const [aiQuestions, setAiQuestions] = useState<AIQuestion[] | null>(null);
@@ -64,6 +68,34 @@ export default function ReaderClient({ params }: PageProps) {
     }
     load();
   }, [id]);
+
+  // Nakdan fetch (cached): only when user has non-off nikud mode and passage loaded
+  useEffect(() => {
+    if (!passage || !passageBody) return;
+    if (nikudMode === "off") { setNakdanReady(false); return; }
+    const cached = getCachedNakdan(passage.id);
+    if (cached) {
+      applyNakdanToPassage(passage, cached);
+      setNakdanReady(true);
+      return;
+    }
+    let cancelled = false;
+    setNakdanLoading(true);
+    nakdanize(passageBody)
+      .then((map) => {
+        if (cancelled) return;
+        cacheNakdan(passage.id, map);
+        applyNakdanToPassage(passage, map);
+        setNakdanReady(true);
+      })
+      .catch(() => {
+        // silent fail — passage still readable without nikud
+      })
+      .finally(() => {
+        if (!cancelled) setNakdanLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [passage, passageBody, nikudMode]);
 
   // Persist bookmark as user reads (throttled via flag)
   useEffect(() => {
@@ -221,6 +253,18 @@ export default function ReaderClient({ params }: PageProps) {
             {readingMode === "rsvp" ? "עבור לרגיל" : "עבור ל-RSVP"}
           </button>
         </div>
+
+        {nakdanLoading && (
+          <div style={{
+            position: "fixed", top: "var(--space-3)", insetInline: "50%",
+            transform: "translateX(50%)",
+            background: "var(--bg-surface)", border: "1px solid var(--border)",
+            borderRadius: "10px", padding: "5px 10px", zIndex: 200,
+            fontFamily: "var(--font-assistant)", fontSize: "11px", color: "var(--text-tertiary)",
+          }}>
+            ...מוסיף ניקוד
+          </div>
+        )}
 
         {hasBookmark && (
           <div style={{
@@ -448,6 +492,21 @@ function QuizQuestion({ question, selected, onSelect }: {
       </div>
     </div>
   );
+}
+
+function applyNakdanToPassage(passage: ProcessedPassage, map: NakdanMap) {
+  // Strip any existing nikud from surface to get bare form for lookup
+  const stripNikud = (s: string) => s.replace(/[֑-ׇ]/g, "");
+  for (const t of passage.tokens) {
+    if (t.kind !== "word") continue;
+    const surface = stripNikud(t.surface).replace(/[^א-ת]/g, "");
+    if (!surface) continue;
+    const fullForm = map.full.get(surface);
+    const partialForm = map.partial.get(surface);
+    if (fullForm) t.nikud = fullForm;
+    if (partialForm) t.nikudPartial = partialForm;
+    if (map.ambiguous.get(surface)) t.ambiguous = true;
+  }
 }
 
 const centerLayout: React.CSSProperties = {

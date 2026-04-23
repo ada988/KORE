@@ -86,42 +86,95 @@ function strip(s: string): string {
 }
 
 export async function extractArticle(url: string): Promise<ExtractResult> {
-  // Validate URL
   const parsed = new URL(url);
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error("unsupported protocol");
   }
 
-  // Try jina.ai reader (returns markdown-ish plain text)
   const proxyUrl = `https://r.jina.ai/${url}`;
   const res = await fetch(proxyUrl, {
-    headers: { Accept: "text/plain", "X-Return-Format": "text" },
-    signal: AbortSignal.timeout(15_000),
+    headers: {
+      Accept: "text/plain",
+      "X-Return-Format": "text",
+      "X-With-Generated-Alt": "false",
+    },
+    signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) {
     throw new Error(`extraction failed (${res.status})`);
   }
   const raw = await res.text();
 
-  // Parse jina's response: first non-empty line after "Title:" header
   const titleMatch = /^Title:\s*(.+)$/m.exec(raw);
   const siteMatch = /^URL Source:\s*(.+)$/m.exec(raw);
   const title = titleMatch?.[1]?.trim() ?? parsed.hostname;
-  const siteName = siteMatch?.[1] ? new URL(siteMatch[1]).hostname : parsed.hostname;
+  let siteName = parsed.hostname;
+  try {
+    if (siteMatch?.[1]) siteName = new URL(siteMatch[1]).hostname;
+  } catch { /* fall back to parsed hostname */ }
 
-  // Body starts after "Markdown Content:" marker
   const bodyIdx = raw.indexOf("Markdown Content:");
   let body = bodyIdx >= 0 ? raw.slice(bodyIdx + "Markdown Content:".length).trim() : raw.trim();
 
-  // Strip markdown artifacts (headings, images, links) but keep text
-  body = body
-    .replace(/^\s*#+\s*/gm, "")
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  body = cleanMarkdown(body);
 
-  if (body.length < 40) throw new Error("no content extracted");
+  if (body.length < 80) throw new Error("no content extracted");
 
   return { title, body, siteName, url };
+}
+
+function cleanMarkdown(input: string): string {
+  let s = input;
+
+  // Strip images: ![alt](url) and ![alt][ref]
+  s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, "");
+  s = s.replace(/!\[[^\]]*\]\[[^\]]*\]/g, "");
+
+  // Strip link-wrapped citation numbers: [[1]](url), [1]
+  s = s.replace(/\[\[\d+\]\]\([^)]+\)/g, "");
+  s = s.replace(/\[\d+\]/g, "");
+
+  // Strip Wikipedia-style "[source needed]" etc. in Hebrew
+  s = s.replace(/\[דרוש מקור[^\]]*\]/g, "");
+  s = s.replace(/\[citation needed\]/gi, "");
+
+  // Collapse markdown links to plain text: [text](url) → text
+  s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+
+  // Strip remaining bare URLs
+  s = s.replace(/\bhttps?:\/\/\S+/g, "");
+
+  // Strip headings, bold/italic markers, blockquote marks
+  s = s.replace(/^\s{0,3}#+\s*/gm, "");
+  s = s.replace(/\*\*([^*]+)\*\*/g, "$1");
+  s = s.replace(/__([^_]+)__/g, "$1");
+  s = s.replace(/\*([^*]+)\*/g, "$1");
+  s = s.replace(/_([^_]+)_/g, "$1");
+  s = s.replace(/^\s{0,3}>\s?/gm, "");
+  s = s.replace(/^\s{0,3}[-*+]\s+/gm, "• ");
+
+  // Drop "Image N" orphan labels from jina.ai rendering
+  s = s.replace(/^Image \d+.*$/gmi, "");
+
+  // Drop table rows / pipe separators → convert to commas
+  s = s.replace(/^\s*\|.*\|.*$/gm, (row) =>
+    row.split("|").map((c) => c.trim()).filter(Boolean).join(", "),
+  );
+
+  // Collapse multiple spaces and blank-line runs
+  s = s.replace(/[ \t]+/g, " ");
+  s = s.replace(/\n{3,}/g, "\n\n");
+
+  // Drop lines that are just 1-2 words (nav/button remnants)
+  s = s
+    .split("\n")
+    .filter((line) => {
+      const t = line.trim();
+      if (t.length === 0) return true;
+      if (t.length < 6) return false;
+      return true;
+    })
+    .join("\n");
+
+  return s.trim();
 }

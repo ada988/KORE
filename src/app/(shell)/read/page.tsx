@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { DEMO_PASSAGES } from "@/lib/demo-passages";
 import { savePassage, getSavedPassages, deletePassage, getBookmark } from "@/lib/session-utils";
 import { extractArticle, fetchFeed, type RssItem } from "@/lib/extract";
+import { importFile } from "@/lib/file-import";
 import { tokenizeText } from "@/lib/tokenize";
 import * as haptics from "@/lib/haptics";
 import { IconLink, IconBookmark, IconShare, IconTrash, IconPlus } from "@/components/ui/Icons";
@@ -13,11 +14,20 @@ import type { Passage } from "@/types/database";
 type View = "browse" | "paste" | "url" | "rss";
 type Category = "all" | "library" | "saved" | "easy" | "medium" | "hard" | "pet";
 
+type UrlPreview = {
+  title: string;
+  body: string;
+  siteName: string;
+  wordCount: number;
+  sourceUrl: string;
+};
+
 export default function ReadPage() {
   const router = useRouter();
   const [view, setView] = useState<View>("browse");
   const [text, setText] = useState("");
   const [urlValue, setUrlValue] = useState("");
+  const [urlPreview, setUrlPreview] = useState<UrlPreview | null>(null);
   const [rssUrl, setRssUrl] = useState("");
   const [rssItems, setRssItems] = useState<RssItem[]>([]);
   const [rssFeedTitle, setRssFeedTitle] = useState("");
@@ -44,6 +54,35 @@ export default function ReadPage() {
     haptics.success();
     router.push(`/read/${id}`);
   }, [text, title, router]);
+
+  const handleFileImport = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".pdf,.epub,.txt,.md,application/pdf,application/epub+zip,text/plain";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setLoading(true);
+      try {
+        const imp = await importFile(file);
+        if (imp.body.length < 40) throw new Error("empty");
+        const tokenized = tokenizeText(imp.body, "tmp", imp.title);
+        const id = await savePassage(
+          imp.title, imp.body,
+          tokenized.wordCount, tokenized.charCount,
+          { source_type: imp.sourceType === "txt" ? "paste" : imp.sourceType },
+        );
+        haptics.success();
+        router.push(`/read/${id}`);
+      } catch (err) {
+        haptics.error();
+        const msg = err instanceof Error ? err.message : "unknown";
+        flash(`ייבוא נכשל: ${msg.slice(0, 40)}`);
+        setLoading(false);
+      }
+    };
+    input.click();
+  }, [router]);
 
   const handleFetchFeed = useCallback(async () => {
     if (!rssUrl.trim()) return;
@@ -83,22 +122,39 @@ export default function ReadPage() {
   const handleUrlImport = useCallback(async () => {
     if (!urlValue.trim()) return;
     setLoading(true);
+    setUrlPreview(null);
     try {
       const data = await extractArticle(urlValue.trim());
       const tokenized = tokenizeText(data.body, "tmp", data.title);
-      const id = await savePassage(
-        data.title, data.body,
-        tokenized.wordCount, tokenized.charCount,
-        { source_type: "url", source_url: urlValue, author: data.byline ?? null, domain: data.siteName ?? null },
-      );
+      setUrlPreview({
+        title: data.title,
+        body: data.body,
+        siteName: data.siteName ?? "",
+        wordCount: tokenized.wordCount,
+        sourceUrl: urlValue.trim(),
+      });
       haptics.success();
-      router.push(`/read/${id}`);
-    } catch {
+    } catch (err) {
       haptics.error();
-      flash("לא הצלחנו לייבא מהכתובת");
+      const msg = err instanceof Error ? err.message : "unknown";
+      flash(`לא הצלחנו לייבא: ${msg.slice(0, 40)}`);
+    } finally {
       setLoading(false);
     }
-  }, [urlValue, router]);
+  }, [urlValue]);
+
+  const handleConfirmImport = useCallback(async () => {
+    if (!urlPreview) return;
+    setLoading(true);
+    const tokenized = tokenizeText(urlPreview.body, "tmp", urlPreview.title);
+    const id = await savePassage(
+      urlPreview.title, urlPreview.body,
+      tokenized.wordCount, tokenized.charCount,
+      { source_type: "url", source_url: urlPreview.sourceUrl, domain: urlPreview.siteName || null },
+    );
+    haptics.success();
+    router.push(`/read/${id}`);
+  }, [urlPreview, router]);
 
   const allPassages = useMemo(() => {
     const demos = DEMO_PASSAGES.map((p) => ({
@@ -230,40 +286,92 @@ export default function ReadPage() {
     return (
       <div style={{ display: "flex", flexDirection: "column", padding: "var(--space-4)", gap: "var(--space-4)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-          <button onClick={() => setView("browse")} style={backBtn}>← חזור</button>
+          <button onClick={() => { setView("browse"); setUrlPreview(null); }} style={backBtn}>← חזור</button>
           <h1 style={pageTitle}>ייבוא מכתובת</h1>
         </div>
-        <p style={{ fontFamily: "var(--font-assistant)", fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.6 }}>
-          הדבק כתובת של מאמר באינטרנט. הטקסט יחולץ אוטומטית ויהיה זמין לקריאה במצב לא מקוון.
-        </p>
-        <input
-          value={urlValue}
-          onChange={(e) => setUrlValue(e.target.value)}
-          placeholder="https://example.co.il/article"
-          dir="ltr"
-          style={{
-            fontFamily: "var(--font-mono)", fontSize: "14px",
-            color: "var(--text-primary)", backgroundColor: "var(--bg-surface)",
-            border: "1px solid var(--border)", borderRadius: "10px",
-            padding: "var(--space-3) var(--space-4)", outline: "none",
-          }}
-        />
-        <button
-          onClick={handleUrlImport}
-          disabled={!urlValue.trim() || loading}
-          style={{ ...accentBtn, opacity: !urlValue.trim() || loading ? 0.5 : 1 }}
-        >
-          {loading ? "...מייבא" : "ייבא ופתח"}
-        </button>
-        <div style={{
-          padding: "var(--space-3) var(--space-4)",
-          backgroundColor: "var(--bg-surface)", borderRadius: "10px",
-          border: "1px solid var(--border)", borderInlineStart: "3px solid var(--focus-amber)",
-        }}>
-          <p style={{ fontFamily: "var(--font-assistant)", fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.6 }}>
-            הייבוא כפוף לזכויות יוצרים. יש להשתמש רק בתוכן שיש לך הרשאה לקרוא.
-          </p>
-        </div>
+
+        {!urlPreview && (
+          <>
+            <p style={{ fontFamily: "var(--font-assistant)", fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+              הדבק כתובת של מאמר באינטרנט. הטקסט יחולץ דרך r.jina.ai ויהיה זמין לקריאה במצב לא מקוון.
+            </p>
+            <input
+              value={urlValue}
+              onChange={(e) => setUrlValue(e.target.value)}
+              placeholder="https://example.co.il/article"
+              dir="ltr"
+              style={{
+                fontFamily: "var(--font-mono)", fontSize: "14px",
+                color: "var(--text-primary)", backgroundColor: "var(--bg-surface)",
+                border: "1px solid var(--border)", borderRadius: "10px",
+                padding: "var(--space-3) var(--space-4)", outline: "none",
+              }}
+            />
+            <button
+              onClick={handleUrlImport}
+              disabled={!urlValue.trim() || loading}
+              style={{ ...accentBtn, opacity: !urlValue.trim() || loading ? 0.5 : 1 }}
+            >
+              {loading ? "...מחלץ" : "חלץ טקסט"}
+            </button>
+            <div style={{
+              padding: "var(--space-3) var(--space-4)",
+              backgroundColor: "var(--bg-surface)", borderRadius: "10px",
+              border: "1px solid var(--border)", borderInlineStart: "3px solid var(--focus-amber)",
+            }}>
+              <p style={{ fontFamily: "var(--font-assistant)", fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                הייבוא כפוף לזכויות יוצרים. יש להשתמש רק בתוכן שיש לך הרשאה לקרוא.
+              </p>
+            </div>
+          </>
+        )}
+
+        {urlPreview && (
+          <>
+            <div style={{
+              padding: "var(--space-4)", backgroundColor: "var(--bg-surface)",
+              borderRadius: "12px", border: "1px solid var(--border)",
+              display: "flex", flexDirection: "column", gap: "var(--space-2)",
+            }}>
+              <input
+                value={urlPreview.title}
+                onChange={(e) => setUrlPreview({ ...urlPreview, title: e.target.value })}
+                style={{
+                  fontFamily: "var(--font-heebo)", fontSize: "17px", fontWeight: 600,
+                  color: "var(--text-primary)", backgroundColor: "transparent",
+                  border: "none", outline: "none", direction: "rtl",
+                }}
+              />
+              <div style={{ display: "flex", gap: "var(--space-3)", fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                <span>{urlPreview.siteName}</span>
+                <span>·</span>
+                <span><bdi>{urlPreview.wordCount}</bdi> מילים</span>
+              </div>
+            </div>
+            <textarea
+              value={urlPreview.body}
+              onChange={(e) => setUrlPreview({ ...urlPreview, body: e.target.value })}
+              dir="rtl"
+              lang="he"
+              style={{
+                minHeight: "280px", maxHeight: "420px", resize: "vertical",
+                fontFamily: "var(--font-heebo)", fontSize: "14px", lineHeight: 1.7,
+                color: "var(--text-primary)", backgroundColor: "var(--bg-surface)",
+                border: "1px solid var(--border)", borderRadius: "12px",
+                padding: "var(--space-4)", outline: "none", direction: "rtl",
+              }}
+            />
+            <p style={{ fontFamily: "var(--font-assistant)", fontSize: "11px", color: "var(--text-tertiary)", textAlign: "center" }}>
+              ערוך את הטקסט אם יש שאריות תפריט או ניווט
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)" }}>
+              <button onClick={() => setUrlPreview(null)} style={ghostBtnInline}>נסה שוב</button>
+              <button onClick={handleConfirmImport} disabled={loading} style={{ ...accentBtn, opacity: loading ? 0.5 : 1 }}>
+                {loading ? "..." : "שמור ופתח"}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -283,6 +391,11 @@ export default function ReadPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1 style={pageTitle}>קריאה</h1>
         <div style={{ display: "flex", gap: "var(--space-2)" }}>
+          <button onClick={() => { handleFileImport(); haptics.tap(); }} style={iconBtn} aria-label="קובץ">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+            </svg>
+          </button>
           <button onClick={() => { setView("rss"); haptics.tap(); }} style={iconBtn} aria-label="RSS">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/>
@@ -430,6 +543,14 @@ function PassageRow({
         </div>
       </div>
       <div style={{ display: "flex", gap: "var(--space-1)", alignItems: "center", marginInlineStart: "var(--space-2)" }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); window.location.href = `/passages/${passage.id}/history`; }}
+          style={iconBtnInline} aria-label="היסטוריה"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 8v5l3 2"/><circle cx="12" cy="12" r="9"/>
+          </svg>
+        </button>
         <button onClick={share} style={iconBtnInline} aria-label="שתף">
           <IconShare size={14} style={{ color: "var(--text-tertiary)" }} />
         </button>
@@ -464,6 +585,12 @@ const iconBtn: React.CSSProperties = {
   padding: "var(--space-2) var(--space-3)",
   backgroundColor: "var(--bg-surface)", color: "var(--text-secondary)",
   borderRadius: "10px", border: "1px solid var(--border)", cursor: "pointer",
+};
+const ghostBtnInline: React.CSSProperties = {
+  padding: "var(--space-3)", backgroundColor: "var(--bg-surface)",
+  color: "var(--text-secondary)", fontFamily: "var(--font-heebo)",
+  fontWeight: 400, fontSize: "14px", borderRadius: "10px",
+  border: "1px solid var(--border)", cursor: "pointer",
 };
 const iconBtnInline: React.CSSProperties = {
   padding: "6px", backgroundColor: "transparent", border: "none", cursor: "pointer",

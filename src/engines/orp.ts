@@ -3,36 +3,81 @@ import type { Token } from "@/types/token";
 export type OrpMode = "fixed" | "root" | "classic";
 
 /**
+ * Hebrew prefix clusters that can precede a content word.
+ * Order matters: longest first (וכשה before כשה before שה).
+ * Source: standard Hebrew morphology + Deutsch & Rayner 1999 foveal
+ * landing-position research showing prefix-position effects.
+ */
+const HEBREW_PREFIX_CLUSTERS = [
+  "וכשה", "ובשה", "ולשה", "ומשה", "ושה", "וכש",
+  "כשה", "בשה", "לשה", "משה",
+  "וה", "וב", "ול", "ומ", "וכ",
+  "שה", "שב", "של", "שמ", "שכ",
+  "כש", "כה", "כב",
+  "מה", "מב",
+  "בה", "בב",
+  "לה", "לב",
+  "ה", "ו", "ש", "ב", "ל", "מ", "כ",
+];
+
+/**
+ * Detect the index where the stem starts, i.e. how many chars of prefix
+ * cluster are at the front of the surface string (LTR memory order).
+ * Conservative: only strips if the resulting stem is >= 3 chars.
+ */
+export function hebrewStemStart(surface: string): number {
+  const bare = surface.replace(/[֑-ׇ]/g, "");
+  for (const pfx of HEBREW_PREFIX_CLUSTERS) {
+    if (bare.startsWith(pfx) && bare.length - pfx.length >= 3) {
+      // Map the bare-index back to surface-index (nikud chars added offset)
+      return findSurfaceIndex(surface, pfx.length);
+    }
+  }
+  return 0;
+}
+
+function findSurfaceIndex(surface: string, bareIdx: number): number {
+  let count = 0;
+  for (let i = 0; i < surface.length; i++) {
+    const ch = surface[i];
+    if (!ch) continue;
+    if (/[֑-ׇ]/.test(ch)) continue;
+    if (count === bareIdx) return i;
+    count++;
+  }
+  return surface.length;
+}
+
+/**
  * Computes the pivot character index within a token's surface string.
- *
- * The pivot is the character rendered in --root-red in the RSVP view.
- * Three modes:
- *  - "classic": ~30% from the start (mirrored Spritz-style for RTL Hebrew)
- *  - "root": center on the middle root letter (the unique KORÉ feature)
- *  - "fixed": Spritz lookup table by word length
- *
- * Returns an index into token.surface (0-based, left-to-right within the string).
- * Note: Hebrew strings in JS are stored LTR in memory even though rendered RTL.
+ * Modes:
+ *  - "classic": ~30% from start
+ *  - "root":    morphology-adaptive — skip Hebrew prefix cluster, then 30% of stem
+ *  - "fixed":   Spritz length-based lookup
  */
 export function computeOrpPosition(token: Token, mode: OrpMode): number {
   const len = token.surface.length;
-
   if (len === 0) return 0;
 
-  if (mode === "root" && token.rootPositions !== undefined) {
-    // Center on the MIDDLE root letter of the 3-letter root
-    const mid = Math.floor(token.rootPositions.length / 2);
-    return token.rootPositions[mid] ?? Math.floor(len * 0.3);
-  }
-
-  if (mode === "classic") {
-    // Spritz-style: pivot at ~30% from start of the surface string.
-    // For RTL Hebrew rendered in a RTL context this positions the pivot
-    // visually in the right portion of the word as the eye expects.
+  if (mode === "root") {
+    // Prefer explicit root-letter positions when available (from DictaBERT)
+    if (token.rootPositions !== undefined) {
+      const mid = Math.floor(token.rootPositions.length / 2);
+      return token.rootPositions[mid] ?? Math.floor(len * 0.3);
+    }
+    // Heuristic: strip Hebrew prefix cluster, then ~30% of stem
+    const stemStart = hebrewStemStart(token.surface);
+    const stemLen = len - stemStart;
+    if (stemLen >= 3) {
+      return stemStart + Math.max(0, Math.floor(stemLen * 0.3));
+    }
     return Math.max(0, Math.floor(len * 0.3));
   }
 
-  // "fixed" mode: Spritz original lookup table, adapted for Hebrew
+  if (mode === "classic") {
+    return Math.max(0, Math.floor(len * 0.3));
+  }
+
   if (len <= 2) return 0;
   if (len <= 5) return 1;
   if (len <= 9) return 2;
