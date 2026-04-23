@@ -6,50 +6,52 @@ export type RsvpFrame = {
   startIdx: number;
   /** True when this is the last frame — engine will emit "complete" after */
   isLast: boolean;
+  /** Effective WPM at time of emission (reflects progressive/burst modulation) */
+  effectiveWpm: number;
 };
 
 export type RsvpEvent =
   | { type: "frame"; frame: RsvpFrame }
   | { type: "complete" }
-  | { type: "progress"; ratio: number };
+  | { type: "progress"; ratio: number }
+  | { type: "wpm"; wpm: number };
 
 export type RsvpListener = (event: RsvpEvent) => void;
 
+export type SpeedMode = "steady" | "progressive" | "burst" | "adaptive";
+
 export type RsvpConfig = {
-  /** Words per minute, 100–800 */
+  /** Base WPM, 80–900 */
   wpm: number;
-  /** Number of tokens shown per frame (1–4) */
+  /** Tokens per frame, 1–4 */
   chunkSize: number;
-  /** Whether to apply pause multipliers at punctuation and rare/long words */
+  /** Punctuation + rare-word pause multipliers */
   adaptivePauses: boolean;
-  /** Starting token index (for resume) */
+  /** Starting token index (resume / bookmark) */
   startIdx?: number | undefined;
+  /** Speed modulation strategy */
+  speedMode?: SpeedMode | undefined;
+  /** Progressive: WPM added per minute elapsed */
+  progressiveRampPerMin?: number | undefined;
+  /** Hard ceiling for any modulated mode */
+  speedCeiling?: number | undefined;
+  /** Hard floor for any modulated mode */
+  speedFloor?: number | undefined;
+  /** Burst: WPM delta during sprint window */
+  burstBoost?: number | undefined;
+  burstSprintSec?: number | undefined;
+  burstRestSec?: number | undefined;
 };
 
-/**
- * Research-derived pause multipliers.
- * Applied multiplicatively; combined multipliers are capped at 3× to prevent
- * jarring pauses on complex sentences.
- */
 const PAUSE_MULTIPLIERS = {
-  period: 2.5, // . ! ?
-  comma: 1.5, // , ; :
-  colon: 1.8, // em-dash, en-dash
-  long_word: 1.3, // > 6 chars
-  low_freq: 1.4, // frequencyRank > 10_000
+  period: 2.5,
+  comma: 1.5,
+  colon: 1.8,
+  long_word: 1.3,
+  low_freq: 1.4,
   max: 3.0,
 } as const;
 
-/**
- * Drift-corrected RSVP scheduler.
- *
- * Uses `performance.now()` for sub-millisecond timing and adds durations to a
- * running "next due" timestamp rather than to `Date.now()`. This prevents
- * accumulated drift when frames run slightly late (which they always do in RAF).
- *
- * The engine is a pure event emitter — it has no React dependency and can be
- * tested without a DOM.
- */
 export class RsvpEngine {
   private readonly tokens: Token[];
   private config: RsvpConfig;
@@ -58,6 +60,10 @@ export class RsvpEngine {
   private rafId: number | null = null;
   private paused: boolean = true;
   private readonly listeners = new Set<RsvpListener>();
+  private playStartMs: number = 0;
+  private cumulativePlaySec: number = 0;
+  private resumedAtMs: number = 0;
+  private lastEmittedWpm: number = 0;
 
   constructor(tokens: Token[], config: RsvpConfig) {
     this.tokens = tokens;
@@ -71,10 +77,15 @@ export class RsvpEngine {
     if (!this.paused) return;
     this.paused = false;
     this.nextDueMs = performance.now();
+    this.playStartMs = performance.now();
+    this.resumedAtMs = this.playStartMs;
+    this.cumulativePlaySec = 0;
     this.tick();
   }
 
   pause(): void {
+    if (this.paused) return;
+    this.cumulativePlaySec += (performance.now() - this.resumedAtMs) / 1000;
     this.paused = true;
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
@@ -85,11 +96,12 @@ export class RsvpEngine {
   resume(): void {
     if (!this.paused) return;
     this.paused = false;
-    // Re-anchor nextDueMs so we don't catch up on all the skipped time
+    this.resumedAtMs = performance.now();
     this.nextDueMs = performance.now();
     this.tick();
   }
 
+  /** Seek back N content words from current position. */
   seekBackWords(count: number): void {
     const wordTokens = this.tokens
       .slice(0, this.currentIdx)
@@ -115,6 +127,12 @@ export class RsvpEngine {
     }
   }
 
+  /** Direct token-index seek; used for bookmarks and scrub bar. */
+  seekToIdx(idx: number): void {
+    this.currentIdx = Math.max(0, Math.min(this.tokens.length - 1, idx));
+    if (!this.paused) this.nextDueMs = performance.now();
+  }
+
   setWpm(wpm: number): void {
     this.config = { ...this.config, wpm };
   }
@@ -127,8 +145,20 @@ export class RsvpEngine {
     this.config = { ...this.config, adaptivePauses };
   }
 
+  setSpeedMode(speedMode: SpeedMode): void {
+    this.config = { ...this.config, speedMode };
+  }
+
+  updateSpeedConfig(partial: Partial<RsvpConfig>): void {
+    this.config = { ...this.config, ...partial };
+  }
+
   get isPlaying(): boolean {
     return !this.paused;
+  }
+
+  get currentIndex(): number {
+    return this.currentIdx;
   }
 
   get progressRatio(): number {
@@ -158,6 +188,42 @@ export class RsvpEngine {
     }
   }
 
+  /** Compute effective WPM for this moment given speed mode. */
+  private effectiveWpm(): number {
+    const base = this.config.wpm;
+    const mode = this.config.speedMode ?? "steady";
+    const ceiling = this.config.speedCeiling ?? 900;
+    const floor = this.config.speedFloor ?? 80;
+
+    if (mode === "steady" || mode === "adaptive") {
+      return Math.min(ceiling, Math.max(floor, base));
+    }
+
+    const liveSec = this.paused
+      ? this.cumulativePlaySec
+      : this.cumulativePlaySec + (performance.now() - this.resumedAtMs) / 1000;
+
+    if (mode === "progressive") {
+      const ramp = this.config.progressiveRampPerMin ?? 25;
+      const added = (liveSec / 60) * ramp;
+      return Math.min(ceiling, Math.max(floor, base + added));
+    }
+
+    if (mode === "burst") {
+      const sprint = this.config.burstSprintSec ?? 20;
+      const rest = this.config.burstRestSec ?? 40;
+      const cycle = sprint + rest;
+      if (cycle <= 0) return base;
+      const phase = liveSec % cycle;
+      const boost = this.config.burstBoost ?? 150;
+      const isSprint = phase < sprint;
+      const target = isSprint ? base + boost : base;
+      return Math.min(ceiling, Math.max(floor, target));
+    }
+
+    return base;
+  }
+
   private tick = (): void => {
     if (this.paused) return;
 
@@ -172,17 +238,27 @@ export class RsvpEngine {
 
       const chunk = this.getNextChunk();
       const isLast = this.currentIdx >= this.tokens.length;
+      const effective = this.effectiveWpm();
 
       this.emit({
         type: "frame",
-        frame: { tokens: chunk, startIdx: this.currentIdx - chunk.length, isLast },
+        frame: {
+          tokens: chunk,
+          startIdx: this.currentIdx - chunk.length,
+          isLast,
+          effectiveWpm: effective,
+        },
       });
 
       this.emit({ type: "progress", ratio: this.progressRatio });
 
-      // Drift-corrected: add duration to the scheduled time, NOT to `now`.
-      // This means if a frame is 2ms late, the next frame runs 2ms sooner.
-      const duration = this.computeDuration(chunk);
+      // Emit wpm change when it moves meaningfully (for UI counter)
+      if (Math.abs(effective - this.lastEmittedWpm) >= 5) {
+        this.lastEmittedWpm = effective;
+        this.emit({ type: "wpm", wpm: effective });
+      }
+
+      const duration = this.computeDuration(chunk, effective);
       this.nextDueMs += duration;
 
       if (isLast) {
@@ -208,18 +284,17 @@ export class RsvpEngine {
       chunk.push(token);
       this.currentIdx++;
       if (token.kind === "word") wordsInChunk++;
-      // Include trailing punctuation/whitespace that belongs to this chunk
       if (token.isPunctEnd || token.isClauseEnd) break;
     }
 
     return chunk;
   }
 
-  private computeDuration(chunk: Token[]): number {
+  private computeDuration(chunk: Token[], effectiveWpm: number): number {
     const wordCount = chunk.filter((t) => t.kind === "word").length;
     if (wordCount === 0) return 0;
 
-    const baseMs = (60_000 / this.config.wpm) * wordCount;
+    const baseMs = (60_000 / effectiveWpm) * wordCount;
 
     if (!this.config.adaptivePauses) return baseMs;
 

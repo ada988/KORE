@@ -21,8 +21,10 @@ export default function StatsPage() {
 
   const totalWords = stats.reduce((s, d) => s + d.words_read, 0);
   const totalMinutes = stats.reduce((s, d) => s + d.minutes_read, 0);
+  const totalChars = stats.reduce((s, d) => s + d.chars_read, 0);
   const avgWpm = stats.filter((d) => d.avg_wpm).reduce((s, d, _, a) => s + (d.avg_wpm ?? 0) / a.length, 0);
   const maxWpm = stats.reduce((m, d) => Math.max(m, d.avg_wpm ?? 0), 0);
+  const avgCpm = totalMinutes > 0 ? Math.round(totalChars / totalMinutes) : 0;
 
   const last7 = stats.slice(-7);
   const maxWords = Math.max(...last7.map((d) => d.words_read), 1);
@@ -69,6 +71,11 @@ export default function StatsPage() {
           </p>
           <p style={{ fontFamily: "var(--font-assistant)", fontSize: "13px", color: "var(--text-tertiary)", marginTop: "3px" }}>
             ימים רצופים · שיא: <bdi>{streak?.longest_streak ?? 0}</bdi>
+            {streak?.freezes_remaining ? (
+              <span style={{ marginInlineStart: "8px", color: "var(--accent)" }}>
+                🧊 <bdi>{streak.freezes_remaining}</bdi> הקפאות
+              </span>
+            ) : null}
           </p>
         </div>
         {todayStats && (
@@ -92,12 +99,14 @@ export default function StatsPage() {
           { label: "דקות קריאה", value: String(totalMinutes) },
           { label: "מ״ד ממוצע", value: avgWpm > 0 ? String(Math.round(avgWpm)) : "—" },
           { label: "מ״ד שיא", value: maxWpm > 0 ? String(Math.round(maxWpm)) : "—" },
+          { label: "תווים/דק׳", value: avgCpm > 0 ? avgCpm.toLocaleString("he-IL") : "—" },
+          { label: "סשנים", value: String(stats.reduce((s, d) => s + d.sessions_count, 0)) },
         ].map(({ label, value }) => (
           <div key={label} style={{
             backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)",
             borderRadius: "14px", padding: "var(--space-4)",
           }}>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: "24px", fontWeight: 700, color: "var(--text-primary)", direction: "ltr", marginBottom: "4px" }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: "24px", fontWeight: 700, color: "var(--text-primary)", direction: "ltr", marginBottom: "4px", fontVariantNumeric: "tabular-nums" }}>
               {value}
             </p>
             <p style={{ fontFamily: "var(--font-assistant)", fontSize: "12px", color: "var(--text-tertiary)" }}>{label}</p>

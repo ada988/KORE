@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { IconGrid, IconLeaf, IconEye, IconChevronRight } from "@/components/ui/Icons";
+import { IconGrid, IconLeaf, IconEye, IconChevronRight, IconTarget } from "@/components/ui/Icons";
 
 const DRILLS = [
   {
@@ -30,6 +30,15 @@ const DRILLS = [
     detail: "עקוב אחרי נקודת הפוקוס",
     duration: "1–2 דק׳",
     color: "var(--focus-amber)",
+  },
+  {
+    href: "/drills/peripheral",
+    Icon: IconTarget,
+    title: "ראייה היקפית",
+    subtitle: "עיבוד פארא-פובאלי",
+    detail: "זהה מילים בהבזק קצר",
+    duration: "2 דק׳",
+    color: "var(--root-red)",
   },
 ];
 

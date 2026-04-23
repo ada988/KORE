@@ -59,33 +59,25 @@ export default function HomePage() {
         </Link>
       </div>
 
-      {/* Today's goal */}
+      {/* Today's goal — circular ring */}
       <div style={{
         backgroundColor: "var(--bg-surface)", borderRadius: "16px",
-        padding: "var(--space-4) var(--space-5)", border: "1px solid var(--border)",
+        padding: "var(--space-5)", border: "1px solid var(--border)",
+        display: "flex", alignItems: "center", gap: "var(--space-5)",
       }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-3)" }}>
-          <span style={{ fontFamily: "var(--font-assistant)", fontWeight: 600, fontSize: "15px", color: "var(--text-primary)" }}>
+        <GoalRing ratio={goalRatio} size={84} strokeWidth={7} done={goalDone} />
+        <div style={{ flex: 1 }}>
+          <p style={{ fontFamily: "var(--font-assistant)", fontWeight: 600, fontSize: "15px", color: "var(--text-primary)", marginBottom: "3px" }}>
             יעד יומי
-          </span>
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-            {goalDone && <IconCheck size={14} style={{ color: "var(--comp-green)" }} />}
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: goalDone ? "var(--comp-green)" : "var(--text-tertiary)" }}>
-              <bdi>{todayMinutes}</bdi>/<bdi>{dailyGoal}</bdi> דק׳
-            </span>
-          </div>
+          </p>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: "13px", color: goalDone ? "var(--comp-green)" : "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+            <bdi>{todayMinutes}</bdi>/<bdi>{dailyGoal}</bdi> דקות
+          </p>
+          <p style={{ fontFamily: "var(--font-assistant)", fontSize: "11px", color: "var(--text-tertiary)", marginTop: "3px" }}>
+            {goalDone ? "סיימת את היעד היומי" : `עוד ${Math.max(0, dailyGoal - todayMinutes)} דק׳`}
+          </p>
         </div>
-        <div style={{
-          height: "6px", backgroundColor: "var(--bg-elevated)", borderRadius: "3px",
-          overflow: "hidden", direction: "rtl",
-        }}>
-          <div style={{
-            height: "100%", width: `${Math.round(goalRatio * 100)}%`,
-            backgroundColor: goalDone ? "var(--comp-green)" : "var(--accent)",
-            borderRadius: "3px",
-            transition: "width var(--duration-slow) var(--ease-ui)",
-          }} />
-        </div>
+        {goalDone && <IconCheck size={20} style={{ color: "var(--comp-green)" }} />}
       </div>
 
       {/* Continue reading */}
@@ -216,6 +208,32 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
     }}>
       {children}
     </h2>
+  );
+}
+
+function GoalRing({ ratio, size, strokeWidth, done }: { ratio: number; size: number; strokeWidth: number; done: boolean }) {
+  const r = (size - strokeWidth) / 2;
+  const c = 2 * Math.PI * r;
+  const clamped = Math.min(1, Math.max(0, ratio));
+  const offset = c * (1 - clamped);
+  const color = done ? "var(--comp-green)" : "var(--accent)";
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--bg-elevated)" strokeWidth={strokeWidth} />
+      <circle
+        cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color}
+        strokeWidth={strokeWidth} strokeDasharray={c} strokeDashoffset={offset}
+        strokeLinecap="round" transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        style={{ transition: "stroke-dashoffset 0.6s var(--ease-ui)" }}
+      />
+      <text
+        x="50%" y="50%" dominantBaseline="central" textAnchor="middle"
+        fontFamily="var(--font-mono)" fontSize="16" fontWeight="700"
+        fill="var(--text-primary)" style={{ fontVariantNumeric: "tabular-nums" }}
+      >
+        {Math.round(clamped * 100)}%
+      </text>
+    </svg>
   );
 }
 

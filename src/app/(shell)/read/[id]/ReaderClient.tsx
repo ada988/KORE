@@ -3,12 +3,14 @@
 import { use, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { RsvpReader } from "@/components/reading/RsvpReader";
+import { PaginatedReader } from "@/components/reading/PaginatedReader";
 import { tokenizeText } from "@/lib/tokenize";
 import { getDemoPassage, type DemoPassage, type DemoQuestion } from "@/lib/demo-passages";
 import { getDb } from "@/lib/db";
-import { saveSession } from "@/lib/session-utils";
+import { saveSession, getBookmark, setBookmark, clearBookmark, checkAchievements } from "@/lib/session-utils";
 import { useRsvpStore } from "@/stores/rsvp";
-import { IconCheck } from "@/components/ui/Icons";
+import { IconCheck, IconBookmark } from "@/components/ui/Icons";
+import * as haptics from "@/lib/haptics";
 import type { ProcessedPassage } from "@/types/token";
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -17,6 +19,8 @@ export default function ReaderClient({ params }: PageProps) {
   const { id } = use(params);
   const router = useRouter();
   const wpm = useRsvpStore((s) => s.wpm);
+  const readingMode = useRsvpStore((s) => s.readingMode);
+  const setReadingMode = useRsvpStore((s) => s.setReadingMode);
 
   const [passage, setPassage] = useState<ProcessedPassage | null>(null);
   const [demoPassage, setDemoPassage] = useState<DemoPassage | null>(null);
@@ -25,11 +29,18 @@ export default function ReaderClient({ params }: PageProps) {
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
   const [score, setScore] = useState<{ correct: number; total: number } | null>(null);
   const [questionResults, setQuestionResults] = useState<Record<string, { correct: boolean; correctId: string }>>({});
+  const [startIdx, setStartIdx] = useState<number>(0);
+  const [currentIdx, setCurrentIdx] = useState<number>(0);
+  const [newAchievements, setNewAchievements] = useState<{ title: string }[]>([]);
   const startTimeRef = useRef(Date.now());
+  const bookmarkSavedRef = useRef(false);
 
   useEffect(() => {
     startTimeRef.current = Date.now();
     async function load() {
+      const bookmark = getBookmark(id);
+      if (bookmark !== null) setStartIdx(bookmark);
+
       if (id.startsWith("demo-")) {
         const demo = getDemoPassage(id);
         if (!demo) { setError("הקטע לא נמצא"); return; }
@@ -45,14 +56,25 @@ export default function ReaderClient({ params }: PageProps) {
     load();
   }, [id]);
 
+  // Persist bookmark as user reads (throttled via flag)
+  useEffect(() => {
+    if (!passage) return;
+    if (currentIdx <= 1) return;
+    if (currentIdx >= passage.tokens.length - 1) return;
+    setBookmark(id, currentIdx);
+  }, [currentIdx, id, passage]);
+
   const handleComplete = useCallback(async () => {
     if (!passage) return;
+    if (bookmarkSavedRef.current) return;
+    bookmarkSavedRef.current = true;
+
     const durationSec = Math.round((Date.now() - startTimeRef.current) / 1000);
     const wpmActual = durationSec > 0 ? Math.round((passage.wordCount / durationSec) * 60) : wpm;
 
     await saveSession({
       passage_id: id,
-      mode: "rsvp",
+      mode: readingMode === "rsvp" ? "rsvp" : "paginated",
       wpm_target: wpm,
       wpm_actual: wpmActual,
       nikud_mode: null,
@@ -69,13 +91,17 @@ export default function ReaderClient({ params }: PageProps) {
       device_info: null,
     });
 
+    clearBookmark(id);
+    const earned = await checkAchievements();
+    setNewAchievements(earned.map((a) => ({ title: a.title })));
+
     const questions = demoPassage?.questions;
     if (questions && questions.length > 0) {
       setPhase("quiz");
     } else {
       setPhase("done");
     }
-  }, [passage, id, wpm, demoPassage]);
+  }, [passage, id, wpm, demoPassage, readingMode]);
 
   const handleQuizSubmit = useCallback(() => {
     const questions = demoPassage?.questions ?? [];
@@ -91,6 +117,7 @@ export default function ReaderClient({ params }: PageProps) {
     setQuestionResults(results);
     setScore({ correct, total: questions.length });
     setPhase("done");
+    haptics.chime();
   }, [quizAnswers, demoPassage]);
 
   if (error) {
@@ -105,24 +132,72 @@ export default function ReaderClient({ params }: PageProps) {
   if (!passage) {
     return (
       <div style={centerLayout}>
-        <p style={{ color: "var(--text-tertiary)", fontFamily: "var(--font-assistant)" }}>...טוען</p>
+        <div className="skeleton" style={{ width: "60%", height: "24px", marginBottom: "var(--space-3)" }} />
+        <div className="skeleton" style={{ width: "40%", height: "14px" }} />
       </div>
     );
   }
 
   if (phase === "reading") {
+    const hasBookmark = startIdx > 0;
     return (
       <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
-        <RsvpReader passage={passage} onComplete={handleComplete} />
-        <button
-          onClick={() => router.back()}
-          style={{
-            position: "fixed", top: "var(--space-4)", insetInlineStart: "var(--space-4)",
-            background: "none", border: "none", cursor: "pointer",
-            fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-tertiary)", opacity: 0.6,
-            zIndex: 200,
-          }}
-        >← חזור</button>
+        {readingMode === "rsvp" ? (
+          <RsvpReader
+            passage={passage}
+            onComplete={handleComplete}
+            onIdxChange={setCurrentIdx}
+            startIdx={startIdx}
+          />
+        ) : (
+          <PaginatedReader
+            passage={passage}
+            onComplete={handleComplete}
+            startIdx={startIdx}
+            onIdxChange={setCurrentIdx}
+          />
+        )}
+
+        <div style={{
+          position: "fixed", top: "var(--space-3)", insetInlineStart: "var(--space-3)",
+          display: "flex", gap: "var(--space-2)", zIndex: 200,
+        }}>
+          <button
+            onClick={() => router.back()}
+            style={{
+              background: "var(--bg-surface)", border: "1px solid var(--border)",
+              borderRadius: "10px", padding: "6px 12px", cursor: "pointer",
+              fontFamily: "var(--font-assistant)", fontSize: "12px", color: "var(--text-secondary)",
+            }}
+          >
+            ← חזור
+          </button>
+          <button
+            onClick={() => { setReadingMode(readingMode === "rsvp" ? "paginated" : "rsvp"); haptics.tap(); }}
+            style={{
+              background: "var(--bg-surface)", border: "1px solid var(--border)",
+              borderRadius: "10px", padding: "6px 12px", cursor: "pointer",
+              fontFamily: "var(--font-assistant)", fontSize: "12px", color: "var(--text-secondary)",
+            }}
+          >
+            {readingMode === "rsvp" ? "עבור לרגיל" : "עבור ל-RSVP"}
+          </button>
+        </div>
+
+        {hasBookmark && (
+          <div style={{
+            position: "fixed", top: "var(--space-3)", insetInlineEnd: "var(--space-3)",
+            background: "color-mix(in srgb, var(--focus-amber) 18%, var(--bg-surface))",
+            border: "1px solid var(--focus-amber)",
+            borderRadius: "10px", padding: "5px 10px", zIndex: 200,
+            display: "flex", alignItems: "center", gap: "5px",
+          }}>
+            <IconBookmark size={12} style={{ color: "var(--focus-amber)" }} />
+            <span style={{ fontFamily: "var(--font-assistant)", fontSize: "11px", color: "var(--focus-amber)", fontWeight: 600 }}>
+              ממשיך מהסימניה
+            </span>
+          </div>
+        )}
       </div>
     );
   }
@@ -138,7 +213,7 @@ export default function ReaderClient({ params }: PageProps) {
             key={q.id}
             question={q}
             selected={quizAnswers[q.id]}
-            onSelect={(optId) => setQuizAnswers((prev) => ({ ...prev, [q.id]: optId }))}
+            onSelect={(optId) => { setQuizAnswers((prev) => ({ ...prev, [q.id]: optId })); haptics.tap(); }}
           />
         ))}
         <button
@@ -152,9 +227,9 @@ export default function ReaderClient({ params }: PageProps) {
     );
   }
 
-  // Done screen
   const durationSec = Math.round((Date.now() - startTimeRef.current) / 1000);
   const wpmActual = durationSec > 0 ? Math.round((passage.wordCount / durationSec) * 60) : wpm;
+  const cpm = Math.round(passage.charCount / Math.max(1, durationSec) * 60);
   const scoreColor = score ? (score.correct >= score.total * 0.7 ? "var(--comp-green)" : "var(--focus-amber)") : "var(--comp-green)";
   return (
     <div style={{ padding: "var(--space-5)", display: "flex", flexDirection: "column", gap: "var(--space-5)", overflowY: "auto" }}>
@@ -171,23 +246,41 @@ export default function ReaderClient({ params }: PageProps) {
         </h1>
       </div>
 
+      {newAchievements.length > 0 && (
+        <div style={{
+          backgroundColor: "color-mix(in srgb, var(--focus-amber) 10%, var(--bg-surface))",
+          border: "1px solid var(--focus-amber)",
+          borderRadius: "14px", padding: "var(--space-4)",
+          display: "flex", flexDirection: "column", gap: "var(--space-2)",
+        }}>
+          <p style={{ fontFamily: "var(--font-assistant)", fontSize: "12px", fontWeight: 700, color: "var(--focus-amber)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            הישג חדש
+          </p>
+          {newAchievements.map((a) => (
+            <p key={a.title} style={{ fontFamily: "var(--font-heebo)", fontSize: "15px", color: "var(--text-primary)" }}>
+              🏆 {a.title}
+            </p>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
         {[
           { label: "מילים", value: passage.wordCount.toLocaleString("he-IL") },
           { label: "מ״ד", value: String(wpmActual) },
+          { label: "תווים/דק׳", value: String(cpm) },
           ...(score ? [{ label: "הבנה", value: `${score.correct}/${score.total}` }] : []),
         ].map(({ label, value }) => (
           <div key={label} style={{
             backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)",
             borderRadius: "12px", padding: "var(--space-4)", textAlign: "center",
           }}>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: "24px", fontWeight: 700, color: "var(--text-primary)", direction: "ltr" }}>{value}</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: "24px", fontWeight: 700, color: "var(--text-primary)", direction: "ltr", fontVariantNumeric: "tabular-nums" }}>{value}</p>
             <p style={{ fontFamily: "var(--font-assistant)", fontSize: "12px", color: "var(--text-tertiary)" }}>{label}</p>
           </div>
         ))}
       </div>
 
-      {/* Per-question feedback */}
       {score && demoPassage?.questions && Object.keys(questionResults).length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
           <h2 style={{ fontFamily: "var(--font-assistant)", fontWeight: 600, fontSize: "12px", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
@@ -219,6 +312,11 @@ export default function ReaderClient({ params }: PageProps) {
                     <IconCheck size={12} style={{ color: "var(--comp-green)", flexShrink: 0 }} />
                     {isCorrect ? "נכון" : `התשובה הנכונה: ${correctOpt?.text ?? ""}`}
                   </p>
+                  {q.explanation && (
+                    <p style={{ fontFamily: "var(--font-assistant)", fontSize: "12px", color: "var(--text-tertiary)", marginTop: "4px" }}>
+                      {q.explanation}
+                    </p>
+                  )}
                 </div>
               </div>
             );
@@ -227,7 +325,7 @@ export default function ReaderClient({ params }: PageProps) {
       )}
 
       <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap", justifyContent: "center" }}>
-        <button onClick={() => { setPhase("reading"); startTimeRef.current = Date.now(); }} style={accentBtn}>
+        <button onClick={() => { setPhase("reading"); startTimeRef.current = Date.now(); bookmarkSavedRef.current = false; setStartIdx(0); }} style={accentBtn}>
           קרא שוב
         </button>
         <button onClick={() => router.push("/read")} style={ghostBtn}>

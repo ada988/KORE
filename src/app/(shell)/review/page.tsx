@@ -2,10 +2,53 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { getDb } from "@/lib/db";
-import { IconCheck, IconStar } from "@/components/ui/Icons";
+import { IconCheck, IconStar, IconPlus } from "@/components/ui/Icons";
+import * as haptics from "@/lib/haptics";
 import type { ReviewCard } from "@/types/database";
 
 const LOCAL_USER_ID = "local";
+
+/**
+ * Seed a handful of classic Hebrew homograph + root cards for first-run demo.
+ * Homographs chosen per Bar-On & Ravid (2017) — high-frequency ambiguity.
+ */
+const SEED_CARDS: Array<Pick<ReviewCard, "card_type" | "front" | "back">> = [
+  { card_type: "homograph", front: "ספר", back: "ספר = book / barber / counted / recount — ההקשר קובע" },
+  { card_type: "homograph", front: "פרה", back: "פרה = cow (shem etzem) / purru = she is fruitful (po'al)" },
+  { card_type: "homograph", front: "ברא", back: "ברא = create (verb) / healthy (shaleem)" },
+  { card_type: "homograph", front: "דברה", back: "דברה = she spoke / plague / commandment (contextual)" },
+  { card_type: "root", front: "כ-ת-ב", back: "לכתוב, כתיבה, כתב, מכתב, כותרת" },
+  { card_type: "root", front: "ל-מ-ד", back: "ללמוד, ללמד, תלמיד, מלמד, לימוד" },
+  { card_type: "root", front: "ר-א-ה", back: "לראות, ראיה, מראה, ראשית" },
+  { card_type: "root", front: "ש-מ-ר", back: "לשמור, שומר, משמר, שמירה, שמרנות" },
+  { card_type: "vocab", front: "הינומה", back: "צעיף הכלה; כיסוי שקוף על הראש" },
+  { card_type: "vocab", front: "תזכיר", back: "מסמך קצר המסכם החלטה או הצעת פעולה" },
+];
+
+async function ensureSeed() {
+  const db = getDb();
+  const count = await db.review_cards.where("user_id").equals(LOCAL_USER_ID).count();
+  if (count > 0) return;
+  const now = new Date().toISOString();
+  await db.review_cards.bulkAdd(
+    SEED_CARDS.map((c) => ({
+      ...c,
+      id: crypto.randomUUID(),
+      user_id: LOCAL_USER_ID,
+      context_passage_id: null,
+      due: now,
+      stability: null,
+      difficulty: null,
+      elapsed_days: 0,
+      scheduled_days: 1,
+      reps: 0,
+      lapses: 0,
+      state: 0 as const,
+      last_review: null,
+      created_at: now,
+    })),
+  );
+}
 
 export default function ReviewPage() {
   const [dueCards, setDueCards] = useState<ReviewCard[]>([]);
@@ -27,11 +70,18 @@ export default function ReviewPage() {
     setFlipped(false);
   }, []);
 
+  const seedAndLoad = useCallback(async () => {
+    await ensureSeed();
+    await load();
+    haptics.tap();
+  }, [load]);
+
   useEffect(() => { load(); }, [load]);
 
   const handleRate = useCallback(async (rating: 1 | 2 | 3 | 4) => {
     const card = dueCards[idx];
     if (!card) return;
+    if (rating === 1) haptics.error(); else haptics.tap();
 
     // Simple scheduling without full FSRS: multiply stability by rating factor
     const factor = [0.5, 1, 2, 4][rating - 1]!;
@@ -76,11 +126,19 @@ export default function ReviewPage() {
             <IconCheck size={32} style={{ color: "var(--comp-green)" }} />
           </div>
           <h1 style={titleStyle}>אין כרטיסיות לחזרה</h1>
-          <p style={{ fontFamily: "var(--font-assistant)", color: "var(--text-secondary)", maxWidth: "280px", lineHeight: 1.6, fontSize: "var(--ui-size)" }}>
-            כרטיסיות נוצרות אוטומטית ממילים ושאלות שסומנו לחזרה.
-            <br /><br />
-            בוא תקרא קצת!
+          <p style={{ fontFamily: "var(--font-assistant)", color: "var(--text-secondary)", maxWidth: "300px", lineHeight: 1.6, fontSize: "var(--ui-size)" }}>
+            כרטיסיות נוצרות אוטומטית מסימון טקסט בקורא הרגיל ומשאלות הבנה.
           </p>
+          <button onClick={seedAndLoad} style={{
+            display: "inline-flex", alignItems: "center", gap: "6px",
+            padding: "var(--space-3) var(--space-6)",
+            backgroundColor: "var(--accent)", color: "#fff",
+            fontFamily: "var(--font-heebo)", fontWeight: 500, fontSize: "14px",
+            borderRadius: "10px", border: "none", cursor: "pointer",
+          }}>
+            <IconPlus size={14} />
+            טען חבילת הדגמה
+          </button>
         </div>
       </div>
     );

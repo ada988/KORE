@@ -59,9 +59,10 @@
   --accent-subtle: var(--tekhelet-400);
 }
 
-/* ── Dark mode overrides ── */
+/* ── Dark mode overrides (prefers-color-scheme + explicit .dark class) ── */
+/* prefers-color-scheme is applied ONLY when no theme class is set. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  html:not(.light):not(.dark) {
     --bg: var(--obsidian-950);
     --bg-surface: var(--obsidian-900);
     --bg-elevated: var(--obsidian-800);
@@ -340,6 +341,93 @@ body {
   --accent: var(--tekhelet-500);
   --accent-hover: var(--tekhelet-600);
   --accent-subtle: var(--tekhelet-400);
+}
+
+/* ── Sepia ambience (eye-strain-friendly) ── */
+.ambience-sepia {
+  --bg: #f5ecd8;
+  --bg-surface: #efe3c6;
+  --bg-elevated: #e6d8b2;
+  --border: #d9c89a;
+  --text-primary: #3b2a14;
+  --text-secondary: #5b4424;
+  --text-tertiary: #8a7449;
+  --accent: #8b5a2b;
+  --accent-hover: #6b4520;
+  --accent-subtle: #c49a6c;
+  --root-red: #a3382f;
+}
+
+/* ── High-contrast ambience (AA+) ── */
+.ambience-high-contrast.dark,
+.dark.ambience-high-contrast {
+  --text-primary: #ffffff;
+  --text-secondary: #d8d5d0;
+  --text-tertiary: #a6a29b;
+  --border: #3a4050;
+}
+.ambience-high-contrast.light,
+.light.ambience-high-contrast {
+  --text-primary: #000000;
+  --text-secondary: #222428;
+  --text-tertiary: #4a4d53;
+  --border: #9e9788;
+}
+
+/* ── Letter-spacing global hook for reading surfaces ── */
+html {
+  --reading-letter-spacing: 0px;
+}
+.text-reading,
+.rsvp-word-area,
+.paginated-reader {
+  letter-spacing: var(--reading-letter-spacing);
+}
+
+/* Tabular numerals for all monospace surfaces (stats, timers, counters) */
+.num-ltr,
+[style*="var(--font-mono)"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Skeleton shimmer ── */
+@keyframes kore-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 0%,
+    var(--bg-elevated) 50%,
+    var(--bg-surface) 100%
+  );
+  background-size: 200% 100%;
+  animation: kore-shimmer 1.4s linear infinite;
+  border-radius: 8px;
+}
+
+/* ── Paginated reader (dual-mode) ── */
+.paginated-reader {
+  max-width: var(--reading-max-width);
+  margin-inline: auto;
+  padding: var(--space-5);
+  font-size: var(--reading-size);
+  line-height: var(--reading-line-height);
+  direction: rtl;
+  font-family: var(--reading-font, var(--font-heebo));
+}
+.paginated-reader .highlighted {
+  background: color-mix(in srgb, var(--focus-amber) 22%, transparent);
+  border-radius: 3px;
+  padding-inline: 2px;
+  cursor: pointer;
+}
+
+/* ── Root-letter highlight (research-driven: Velan & Frost 2007) ── */
+.root-letter {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 /* ── Mobile: prevent tap flash on buttons ── */

@@ -1,32 +1,86 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { DEMO_PASSAGES } from "@/lib/demo-passages";
-import { savePassage, getSavedPassages } from "@/lib/session-utils";
+import { savePassage, getSavedPassages, deletePassage, getBookmark } from "@/lib/session-utils";
+import { extractArticle } from "@/lib/extract";
 import { tokenizeText } from "@/lib/tokenize";
+import * as haptics from "@/lib/haptics";
+import { IconLink, IconBookmark, IconShare, IconTrash, IconPlus } from "@/components/ui/Icons";
 import type { Passage } from "@/types/database";
 
-type View = "browse" | "paste";
+type View = "browse" | "paste" | "url";
+type Category = "all" | "library" | "saved" | "easy" | "medium" | "hard" | "pet";
 
 export default function ReadPage() {
   const router = useRouter();
   const [view, setView] = useState<View>("browse");
   const [text, setText] = useState("");
+  const [urlValue, setUrlValue] = useState("");
+  const [title, setTitle] = useState("");
   const [savedPassages, setSavedPassages] = useState<Passage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [category, setCategory] = useState<Category>("all");
+  const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => {
-    getSavedPassages().then(setSavedPassages);
-  }, []);
+  const refresh = useCallback(() => getSavedPassages().then(setSavedPassages), []);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const flash = (m: string) => {
+    setToast(m);
+    window.setTimeout(() => setToast(null), 2000);
+  };
 
   const handleStart = useCallback(async () => {
     if (!text.trim()) return;
     setLoading(true);
-    const tokenized = tokenizeText(text, "tmp", "קריאה חופשית");
-    const id = await savePassage("קריאה חופשית", text, tokenized.wordCount, tokenized.charCount);
+    const passageTitle = title.trim() || "קריאה חופשית";
+    const tokenized = tokenizeText(text, "tmp", passageTitle);
+    const id = await savePassage(passageTitle, text, tokenized.wordCount, tokenized.charCount);
+    haptics.success();
     router.push(`/read/${id}`);
-  }, [text, router]);
+  }, [text, title, router]);
+
+  const handleUrlImport = useCallback(async () => {
+    if (!urlValue.trim()) return;
+    setLoading(true);
+    try {
+      const data = await extractArticle(urlValue.trim());
+      const tokenized = tokenizeText(data.body, "tmp", data.title);
+      const id = await savePassage(
+        data.title, data.body,
+        tokenized.wordCount, tokenized.charCount,
+        { source_type: "url", source_url: urlValue, author: data.byline ?? null, domain: data.siteName ?? null },
+      );
+      haptics.success();
+      router.push(`/read/${id}`);
+    } catch {
+      haptics.error();
+      flash("לא הצלחנו לייבא מהכתובת");
+      setLoading(false);
+    }
+  }, [urlValue, router]);
+
+  const allPassages = useMemo(() => {
+    const demos = DEMO_PASSAGES.map((p) => ({
+      ...p, _kind: "library" as const,
+    }));
+    const saved = savedPassages.map((p) => ({
+      id: p.id, title: p.title, author: p.author ?? undefined,
+      difficulty_band: p.difficulty_band ?? "medium",
+      domain: p.domain ?? "כללי", word_count: p.word_count,
+      _kind: "saved" as const,
+    }));
+    return [...saved, ...demos];
+  }, [savedPassages]);
+
+  const filtered = useMemo(() => {
+    if (category === "all") return allPassages;
+    if (category === "library") return allPassages.filter((p) => p._kind === "library");
+    if (category === "saved") return allPassages.filter((p) => p._kind === "saved");
+    return allPassages.filter((p) => p.difficulty_band === category);
+  }, [allPassages, category]);
 
   if (view === "paste") {
     return (
@@ -35,6 +89,19 @@ export default function ReadPage() {
           <button onClick={() => setView("browse")} style={backBtn}>← חזור</button>
           <h1 style={pageTitle}>הדבקת טקסט</h1>
         </div>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="כותרת (אופציונלי)"
+          dir="rtl"
+          style={{
+            fontFamily: "var(--font-heebo)", fontSize: "15px",
+            color: "var(--text-primary)", backgroundColor: "var(--bg-surface)",
+            border: "1px solid var(--border)", borderRadius: "10px",
+            padding: "var(--space-3) var(--space-4)", outline: "none",
+            marginBottom: "var(--space-3)",
+          }}
+        />
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -53,11 +120,7 @@ export default function ReadPage() {
         <button
           onClick={handleStart}
           disabled={!text.trim() || loading}
-          style={{
-            ...accentBtn,
-            marginTop: "var(--space-4)",
-            opacity: !text.trim() || loading ? 0.5 : 1,
-          }}
+          style={{ ...accentBtn, marginTop: "var(--space-4)", opacity: !text.trim() || loading ? 0.5 : 1 }}
         >
           {loading ? "...טוען" : "התחל לקרוא"}
         </button>
@@ -65,60 +128,140 @@ export default function ReadPage() {
     );
   }
 
+  if (view === "url") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", padding: "var(--space-4)", gap: "var(--space-4)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+          <button onClick={() => setView("browse")} style={backBtn}>← חזור</button>
+          <h1 style={pageTitle}>ייבוא מכתובת</h1>
+        </div>
+        <p style={{ fontFamily: "var(--font-assistant)", fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+          הדבק כתובת של מאמר באינטרנט. הטקסט יחולץ אוטומטית ויהיה זמין לקריאה במצב לא מקוון.
+        </p>
+        <input
+          value={urlValue}
+          onChange={(e) => setUrlValue(e.target.value)}
+          placeholder="https://example.co.il/article"
+          dir="ltr"
+          style={{
+            fontFamily: "var(--font-mono)", fontSize: "14px",
+            color: "var(--text-primary)", backgroundColor: "var(--bg-surface)",
+            border: "1px solid var(--border)", borderRadius: "10px",
+            padding: "var(--space-3) var(--space-4)", outline: "none",
+          }}
+        />
+        <button
+          onClick={handleUrlImport}
+          disabled={!urlValue.trim() || loading}
+          style={{ ...accentBtn, opacity: !urlValue.trim() || loading ? 0.5 : 1 }}
+        >
+          {loading ? "...מייבא" : "ייבא ופתח"}
+        </button>
+        <div style={{
+          padding: "var(--space-3) var(--space-4)",
+          backgroundColor: "var(--bg-surface)", borderRadius: "10px",
+          border: "1px solid var(--border)", borderInlineStart: "3px solid var(--focus-amber)",
+        }}>
+          <p style={{ fontFamily: "var(--font-assistant)", fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+            הייבוא כפוף לזכויות יוצרים. יש להשתמש רק בתוכן שיש לך הרשאה לקרוא.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const CATEGORIES: { id: Category; label: string }[] = [
+    { id: "all", label: "הכל" },
+    { id: "saved", label: "שמורים" },
+    { id: "library", label: "ספרייה" },
+    { id: "easy", label: "קל" },
+    { id: "medium", label: "בינוני" },
+    { id: "hard", label: "קשה" },
+    { id: "pet", label: "פסיכומטרי" },
+  ];
+
   return (
-    <div style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
-      {/* Header */}
+    <div style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1 style={pageTitle}>קריאה</h1>
-        <button onClick={() => setView("paste")} style={accentBtn}>+ הוסף טקסט</button>
+        <div style={{ display: "flex", gap: "var(--space-2)" }}>
+          <button onClick={() => { setView("url"); haptics.tap(); }} style={iconBtn} aria-label="ייבא מכתובת">
+            <IconLink size={16} />
+          </button>
+          <button onClick={() => { setView("paste"); haptics.tap(); }} style={accentBtn}>
+            <IconPlus size={14} style={{ marginInlineEnd: "4px" }} />
+            טקסט
+          </button>
+        </div>
       </div>
 
-      {/* Saved passages */}
-      {savedPassages.length > 0 && (
-        <section>
-          <h2 style={sectionHeader}>שמורים</h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-            {savedPassages.map((p) => (
-              <PassageRow
-                key={p.id}
-                title={p.title}
-                wordCount={p.word_count}
-                band={p.difficulty_band ?? "medium"}
-                domain={p.domain ?? "כללי"}
-                onClick={() => router.push(`/read/${p.id}`)}
-              />
-            ))}
-          </div>
-        </section>
+      {/* Category chips */}
+      <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "2px" }}>
+        {CATEGORIES.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => { setCategory(c.id); haptics.tap(); }}
+            style={{
+              padding: "6px 14px", flexShrink: 0,
+              backgroundColor: category === c.id ? "var(--accent)" : "var(--bg-surface)",
+              color: category === c.id ? "#fff" : "var(--text-secondary)",
+              border: `1px solid ${category === c.id ? "var(--accent)" : "var(--border)"}`,
+              borderRadius: "20px", fontFamily: "var(--font-assistant)", fontSize: "13px",
+              fontWeight: category === c.id ? 600 : 400, cursor: "pointer",
+            }}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 && (
+        <div style={{
+          padding: "var(--space-8) var(--space-4)", textAlign: "center",
+          color: "var(--text-tertiary)", fontFamily: "var(--font-assistant)",
+          fontSize: "14px",
+        }}>
+          אין קטעים בקטגוריה זו
+        </div>
       )}
 
-      {/* Demo library */}
-      <section>
-        <h2 style={sectionHeader}>ספרייה</h2>
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-          {DEMO_PASSAGES.map((p) => (
-            <PassageRow
-              key={p.id}
-              title={p.title}
-              author={p.author}
-              wordCount={p.word_count}
-              band={p.difficulty_band}
-              domain={p.domain}
-              onClick={() => router.push(`/read/${p.id}`)}
-            />
-          ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+        {filtered.map((p) => (
+          <PassageRow
+            key={p.id}
+            passage={p}
+            onClick={() => router.push(`/read/${p.id}`)}
+            onDelete={p._kind === "saved" ? async () => {
+              await deletePassage(p.id);
+              haptics.bump();
+              refresh();
+            } : undefined}
+          />
+        ))}
+      </div>
+
+      {toast && (
+        <div style={{
+          position: "fixed", bottom: "calc(56px + env(safe-area-inset-bottom, 0px) + var(--space-4))",
+          insetInline: 0, display: "flex", justifyContent: "center", zIndex: 150,
+        }}>
+          <div style={toastStyle}>{toast}</div>
         </div>
-      </section>
+      )}
     </div>
   );
 }
 
 function PassageRow({
-  title, author, wordCount, band, domain, onClick,
+  passage, onClick, onDelete,
 }: {
-  title: string; author?: string | undefined; wordCount: number;
-  band: string; domain: string; onClick: () => void;
+  passage: { id: string; title: string; author?: string | undefined; word_count: number; difficulty_band: string; domain: string; _kind: "library" | "saved" };
+  onClick: () => void;
+  onDelete?: (() => void) | undefined;
 }) {
+  const [bookmarked, setBookmarked] = useState(false);
+  useEffect(() => { setBookmarked(getBookmark(passage.id) !== null); }, [passage.id]);
+
   const bandColors: Record<string, string> = {
     easy: "var(--comp-green)", medium: "var(--focus-amber)",
     hard: "var(--root-red)", pet: "var(--accent)",
@@ -126,30 +269,46 @@ function PassageRow({
   const bandLabels: Record<string, string> = {
     easy: "קל", medium: "בינוני", hard: "קשה", pet: "פסיכומטרי",
   };
-  const color = bandColors[band] ?? bandColors.medium;
+  const color = bandColors[passage.difficulty_band] ?? bandColors.medium;
+
+  const share = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/read/${passage.id}`;
+    if (navigator.share) {
+      try { await navigator.share({ title: passage.title, url }); } catch { /* user cancelled */ }
+    } else {
+      try {
+        await navigator.clipboard.writeText(url);
+        haptics.success();
+      } catch { /* clipboard denied */ }
+    }
+  };
 
   return (
-    <button
+    <div
       onClick={onClick}
       style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)",
-        borderRadius: "12px", padding: "var(--space-4)", textAlign: "right",
-        cursor: "pointer", width: "100%", WebkitTapHighlightColor: "transparent",
+        borderRadius: "12px", padding: "var(--space-4)", cursor: "pointer",
+        WebkitTapHighlightColor: "transparent",
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{
-          fontFamily: "var(--font-heebo)", fontWeight: 500, fontSize: "var(--ui-size)",
-          color: "var(--text-primary)", marginBottom: "4px",
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        }}>
-          {title}
-        </p>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "4px" }}>
+          {bookmarked && <IconBookmark size={12} style={{ color: "var(--focus-amber)", flexShrink: 0 }} />}
+          <p style={{
+            fontFamily: "var(--font-heebo)", fontWeight: 500, fontSize: "var(--ui-size)",
+            color: "var(--text-primary)",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1,
+          }}>
+            {passage.title}
+          </p>
+        </div>
         <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center", flexWrap: "wrap" }}>
-          {author && (
+          {passage.author && (
             <span style={{ fontFamily: "var(--font-assistant)", fontSize: "11px", color: "var(--text-tertiary)" }}>
-              {author}
+              {passage.author}
             </span>
           )}
           <span style={{
@@ -157,28 +316,33 @@ function PassageRow({
             color, backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)`,
             padding: "1px 8px", borderRadius: "20px",
           }}>
-            {bandLabels[band] ?? band}
+            {bandLabels[passage.difficulty_band] ?? passage.difficulty_band}
           </span>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-tertiary)" }}>
-            <bdi>{wordCount}</bdi> מילים
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+            <bdi>{passage.word_count}</bdi> מילים
           </span>
           <span style={{ fontFamily: "var(--font-assistant)", fontSize: "11px", color: "var(--text-tertiary)" }}>
-            {domain}
+            {passage.domain}
           </span>
         </div>
       </div>
-      <span style={{ color: "var(--accent)", marginInlineStart: "var(--space-3)", flexShrink: 0 }}>←</span>
-    </button>
+      <div style={{ display: "flex", gap: "var(--space-1)", alignItems: "center", marginInlineStart: "var(--space-2)" }}>
+        <button onClick={share} style={iconBtnInline} aria-label="שתף">
+          <IconShare size={14} style={{ color: "var(--text-tertiary)" }} />
+        </button>
+        {onDelete && (
+          <button onClick={(e) => { e.stopPropagation(); onDelete(); }} style={iconBtnInline} aria-label="מחק">
+            <IconTrash size={14} style={{ color: "var(--error-red)" }} />
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
 const pageTitle: React.CSSProperties = {
   fontFamily: "var(--font-rubik)", fontWeight: 700,
   fontSize: "var(--text-h2)", color: "var(--text-primary)",
-};
-const sectionHeader: React.CSSProperties = {
-  fontFamily: "var(--font-assistant)", fontWeight: 600, fontSize: "14px",
-  color: "var(--text-tertiary)", marginBottom: "var(--space-3)",
 };
 const backBtn: React.CSSProperties = {
   background: "none", border: "none", cursor: "pointer",
@@ -187,9 +351,23 @@ const backBtn: React.CSSProperties = {
 };
 const accentBtn: React.CSSProperties = {
   display: "inline-flex", alignItems: "center", justifyContent: "center",
-  padding: "var(--space-2) var(--space-5)",
+  padding: "var(--space-2) var(--space-4)",
   backgroundColor: "var(--accent)", color: "#fff",
-  fontFamily: "var(--font-heebo)", fontWeight: 500, fontSize: "var(--ui-size)",
+  fontFamily: "var(--font-heebo)", fontWeight: 500, fontSize: "14px",
   borderRadius: "10px", border: "none", cursor: "pointer",
   WebkitTapHighlightColor: "transparent",
+};
+const iconBtn: React.CSSProperties = {
+  padding: "var(--space-2) var(--space-3)",
+  backgroundColor: "var(--bg-surface)", color: "var(--text-secondary)",
+  borderRadius: "10px", border: "1px solid var(--border)", cursor: "pointer",
+};
+const iconBtnInline: React.CSSProperties = {
+  padding: "6px", backgroundColor: "transparent", border: "none", cursor: "pointer",
+  borderRadius: "6px", WebkitTapHighlightColor: "transparent",
+};
+const toastStyle: React.CSSProperties = {
+  backgroundColor: "var(--text-primary)", color: "var(--bg)",
+  padding: "var(--space-2) var(--space-4)", borderRadius: "10px",
+  fontFamily: "var(--font-heebo)", fontSize: "13px",
 };
