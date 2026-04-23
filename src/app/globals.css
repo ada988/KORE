@@ -1,0 +1,329 @@
+@import "tailwindcss";
+
+/* ============================================================
+   KORÉ — Design Token System
+   All CSS custom properties map 1:1 to the Figma variables.
+   Never use hardcoded hex values outside this file.
+   ============================================================ */
+
+/* ── Ink (text) palette ── */
+:root {
+  --ink-900: #0e1116;
+  --ink-700: #2a2f37;
+  --ink-500: #5c6370;
+}
+
+/* ── Parchment (light-mode surfaces) ── */
+:root {
+  --parchment-50: #faf7f0;
+  --parchment-100: #f2ede0;
+  --parchment-200: #e8e1d0;
+}
+
+/* ── Obsidian (dark-mode surfaces) ── */
+:root {
+  --obsidian-950: #0a0c10;
+  --obsidian-900: #12151c;
+  --obsidian-800: #1c2029;
+  --obsidian-700: #2a2f3a;
+}
+
+/* ── Tekhelet accent ── */
+:root {
+  --tekhelet-400: #6baed6;
+  --tekhelet-500: #3182bd;
+  --tekhelet-600: #2166a8;
+  --tekhelet-700: #174a7c;
+}
+
+/* ── Semantic colors ── */
+:root {
+  /* Root-letter highlight and RSVP pivot — used in exactly 3 contexts, nowhere else */
+  --root-red: #d64545;
+  --comp-green: #2e7d5b;
+  --focus-amber: #d97706;
+  --error-red: #b42318;
+}
+
+/* ── Semantic surface / text aliases (light mode default) ── */
+:root {
+  --bg: var(--parchment-50);
+  --bg-surface: var(--parchment-100);
+  --bg-elevated: var(--parchment-200);
+  --border: var(--parchment-200);
+  --text-primary: var(--ink-900);
+  --text-secondary: var(--ink-700);
+  --text-tertiary: var(--ink-500);
+  --accent: var(--tekhelet-500);
+  --accent-hover: var(--tekhelet-600);
+  --accent-subtle: var(--tekhelet-400);
+}
+
+/* ── Dark mode overrides ── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: var(--obsidian-950);
+    --bg-surface: var(--obsidian-900);
+    --bg-elevated: var(--obsidian-800);
+    --border: var(--obsidian-700);
+    --text-primary: #f0ede8;
+    --text-secondary: #b8b4ae;
+    --text-tertiary: #78746e;
+    --accent: var(--tekhelet-400);
+    --accent-hover: var(--tekhelet-500);
+    --accent-subtle: var(--tekhelet-700);
+  }
+}
+
+/* ── Dark mode class override (for explicit user toggle) ── */
+.dark {
+  --bg: var(--obsidian-950);
+  --bg-surface: var(--obsidian-900);
+  --bg-elevated: var(--obsidian-800);
+  --border: var(--obsidian-700);
+  --text-primary: #f0ede8;
+  --text-secondary: #b8b4ae;
+  --text-tertiary: #78746e;
+  --accent: var(--tekhelet-400);
+  --accent-hover: var(--tekhelet-500);
+  --accent-subtle: var(--tekhelet-700);
+}
+
+/* ── Motion tokens ── */
+:root {
+  --duration-instant: 0ms;
+  --duration-quick: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 280ms;
+  --duration-deliberate: 450ms;
+
+  --ease-ui: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-enter: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Spacing (4pt grid) ── */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+}
+
+/* ── Typography tokens ── */
+:root {
+  /* Reading body — user-adjustable 16px–32px, default 22px */
+  --reading-size: 22px;
+  --reading-line-height: 1.7;
+  --reading-max-width: 640px;
+
+  /* UI body */
+  --ui-size: 16px;
+  --ui-line-height: 1.5;
+
+  /* Type scale */
+  --text-display: 48px;
+  --text-h1: 32px;
+  --text-h2: 24px;
+  --text-h3: 20px;
+  --text-caption: 13px;
+}
+
+/* ── Tailwind v4 theme bridge ── */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-border: var(--border);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-subtle: var(--accent-subtle);
+
+  --color-ink-900: var(--ink-900);
+  --color-ink-700: var(--ink-700);
+  --color-ink-500: var(--ink-500);
+
+  --color-parchment-50: var(--parchment-50);
+  --color-parchment-100: var(--parchment-100);
+  --color-parchment-200: var(--parchment-200);
+
+  --color-obsidian-950: var(--obsidian-950);
+  --color-obsidian-900: var(--obsidian-900);
+  --color-obsidian-800: var(--obsidian-800);
+  --color-obsidian-700: var(--obsidian-700);
+
+  --color-tekhelet-400: var(--tekhelet-400);
+  --color-tekhelet-500: var(--tekhelet-500);
+  --color-tekhelet-600: var(--tekhelet-600);
+  --color-tekhelet-700: var(--tekhelet-700);
+
+  --color-root-red: var(--root-red);
+  --color-comp-green: var(--comp-green);
+  --color-focus-amber: var(--focus-amber);
+  --color-error-red: var(--error-red);
+}
+
+/* ============================================================
+   BASE STYLES
+   ============================================================ */
+
+html {
+  /* OpenType features for Hebrew: mark positioning, mark-to-mark, kerning */
+  font-feature-settings: "mark" 1, "mkmk" 1, "kern" 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-size: var(--ui-size);
+  line-height: var(--ui-line-height);
+  min-height: 100dvh;
+}
+
+/* Hebrew text: never uppercase, keep words intact */
+:lang(he) {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+/* Reading surface typography */
+.text-reading {
+  font-feature-settings: "mark" 1, "mkmk" 1, "kern" 1, "ss01" 1;
+  font-size: var(--reading-size);
+  line-height: var(--reading-line-height);
+  max-width: var(--reading-max-width);
+}
+
+/* Numbers always LTR inside RTL text */
+.num-ltr {
+  direction: ltr;
+  display: inline-block;
+  unicode-bidi: isolate;
+}
+
+/* ── Progress bars grow right-to-left in Hebrew context ── */
+[dir="rtl"] .progress-fill {
+  transform-origin: right center;
+}
+
+/* ── Focus ring: tekhelet, not browser-default blue ── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-surface);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* ── Selection highlight ── */
+::selection {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================
+   RSVP READER — critical rendering path styles
+   These must never cause layout reflow during playback.
+   ============================================================ */
+
+.rsvp-stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  /* Shift up ~3% from geometric center to offset Hebrew baseline gravity */
+  padding-block-end: 6vh;
+}
+
+.rsvp-word-area {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Fixed height prevents layout shift between words of different lengths */
+  height: 1.2em;
+  min-width: 8ch;
+}
+
+.rsvp-guide-line {
+  position: absolute;
+  inset-inline: -20vw;
+  height: 1px;
+  background: color-mix(in srgb, var(--ink-500) 10%, transparent);
+  pointer-events: none;
+}
+
+.rsvp-guide-line--top {
+  top: -0.15em;
+}
+
+.rsvp-guide-line--bottom {
+  bottom: -0.2em;
+}
+
+.rsvp-pivot {
+  color: var(--root-red);
+}
+
+/* Context words shown when RSVP is paused */
+.rsvp-context {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: 0.6em;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.rsvp-context--before {
+  inset-inline-end: calc(100% + var(--space-6));
+}
+
+.rsvp-context--after {
+  inset-inline-start: calc(100% + var(--space-6));
+}
