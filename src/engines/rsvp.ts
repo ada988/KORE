@@ -123,6 +123,10 @@ export class RsvpEngine {
     this.config = { ...this.config, chunkSize };
   }
 
+  setAdaptivePauses(adaptivePauses: boolean): void {
+    this.config = { ...this.config, adaptivePauses };
+  }
+
   get isPlaying(): boolean {
     return !this.paused;
   }

@@ -2,10 +2,10 @@
 
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { IconLeaf, IconCheck, IconStar, IconMuscle } from "@/components/ui/Icons";
 
 type Question = {
   word: string;
-  nikud?: string;
   meaning: string;
   options: string[];
   correct: string;
@@ -75,13 +75,19 @@ export default function RootsPage() {
     return (
       <div style={centerLayout}>
         <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-5)" }}>
-          <div style={{ fontSize: "48px" }}>🌿</div>
+          <div style={{
+            width: "72px", height: "72px", borderRadius: "20px",
+            backgroundColor: "color-mix(in srgb, var(--comp-green) 15%, var(--bg-elevated))",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <IconLeaf size={32} style={{ color: "var(--comp-green)" }} />
+          </div>
           <h1 style={titleStyle}>זיהוי שורשים</h1>
           <p style={{ fontFamily: "var(--font-assistant)", color: "var(--text-secondary)", fontSize: "var(--ui-size)", maxWidth: "280px", lineHeight: 1.6 }}>
             בחר את השורש התלת-אותיות הנכון של המילה המוצגת.
           </p>
           <button onClick={start} style={accentBtn}>התחל</button>
-          <button onClick={() => router.back()} style={ghostLink}>← חזור</button>
+          <button onClick={() => router.back()} style={ghostLink}>חזור</button>
         </div>
       </div>
     );
@@ -89,12 +95,20 @@ export default function RootsPage() {
 
   if (phase === "done") {
     const pct = Math.round((correct / questions.length) * 100);
+    const scoreColor = pct >= 80 ? "var(--comp-green)" : pct >= 60 ? "var(--focus-amber)" : "var(--root-red)";
+    const ScoreIcon = pct >= 80 ? IconStar : IconMuscle;
     return (
       <div style={centerLayout}>
         <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-5)" }}>
-          <div style={{ fontSize: "48px" }}>{pct >= 80 ? "🌟" : pct >= 60 ? "👍" : "💪"}</div>
+          <div style={{
+            width: "72px", height: "72px", borderRadius: "50%",
+            backgroundColor: `color-mix(in srgb, ${scoreColor} 15%, var(--bg-elevated))`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <ScoreIcon size={32} style={{ color: scoreColor }} />
+          </div>
           <h1 style={titleStyle}>סיימת!</h1>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: "32px", fontWeight: 700, color: pct >= 80 ? "var(--comp-green)" : pct >= 60 ? "var(--focus-amber)" : "var(--root-red)" }}>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: "40px", fontWeight: 700, color: scoreColor }}>
             {correct}/{questions.length}
           </p>
           <p style={{ fontFamily: "var(--font-assistant)", color: "var(--text-secondary)", fontSize: "14px" }}>
@@ -113,14 +127,15 @@ export default function RootsPage() {
 
   return (
     <div style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-5)", maxWidth: "420px", margin: "0 auto", width: "100%" }}>
-      {/* Progress */}
+      {/* Progress dots */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <button onClick={() => setPhase("intro")} style={ghostLink}>← עצור</button>
-        <div style={{ display: "flex", gap: "4px" }}>
+        <button onClick={() => setPhase("intro")} style={ghostLink}>עצור</button>
+        <div style={{ display: "flex", gap: "5px" }}>
           {questions.map((_, i) => (
             <div key={i} style={{
-              width: "8px", height: "8px", borderRadius: "50%",
+              width: "7px", height: "7px", borderRadius: "50%",
               backgroundColor: i < idx ? "var(--comp-green)" : i === idx ? "var(--accent)" : "var(--border)",
+              transition: "background-color 0.2s",
             }} />
           ))}
         </div>
@@ -153,9 +168,9 @@ export default function RootsPage() {
               style={{
                 padding: "var(--space-4)",
                 backgroundColor: isCorrect
-                  ? "color-mix(in srgb, var(--comp-green) 20%, var(--bg-elevated))"
+                  ? "color-mix(in srgb, var(--comp-green) 16%, var(--bg-elevated))"
                   : isWrong
-                  ? "color-mix(in srgb, var(--error-red) 15%, var(--bg-elevated))"
+                  ? "color-mix(in srgb, var(--error-red) 12%, var(--bg-elevated))"
                   : "var(--bg-surface)",
                 border: `2px solid ${isCorrect ? "var(--comp-green)" : isWrong ? "var(--error-red)" : isSelected ? "var(--accent)" : "var(--border)"}`,
                 borderRadius: "14px",
@@ -163,7 +178,7 @@ export default function RootsPage() {
                 color: isCorrect ? "var(--comp-green)" : isWrong ? "var(--error-red)" : "var(--text-primary)",
                 cursor: "pointer", direction: "rtl",
                 WebkitTapHighlightColor: "transparent",
-                transition: "background-color 0.15s, border-color 0.15s",
+                transition: "background-color 0.12s, border-color 0.12s",
               }}
             >
               {opt}
@@ -179,7 +194,12 @@ export default function RootsPage() {
             backgroundColor: "var(--bg-surface)", borderRadius: "12px",
             padding: "var(--space-4)", border: "1px solid var(--border)",
             borderInlineStart: `3px solid ${selected === q.correct ? "var(--comp-green)" : "var(--error-red)"}`,
+            display: "flex", alignItems: "flex-start", gap: "var(--space-3)",
           }}>
+            {selected === q.correct
+              ? <IconCheck size={16} style={{ color: "var(--comp-green)", marginTop: "1px", flexShrink: 0 }} />
+              : <span style={{ color: "var(--error-red)", fontFamily: "var(--font-mono)", fontSize: "14px", lineHeight: 1, flexShrink: 0, marginTop: "1px" }}>✕</span>
+            }
             <p style={{ fontFamily: "var(--font-assistant)", fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.6 }}>
               {selected === q.correct
                 ? `נכון! השורש ${q.correct} מופיע במילה "${q.word}".`
@@ -187,7 +207,7 @@ export default function RootsPage() {
             </p>
           </div>
           <button onClick={handleNext} style={accentBtn}>
-            {idx + 1 < questions.length ? "הבא ←" : "סיים"}
+            {idx + 1 < questions.length ? "הבא" : "סיים"}
           </button>
         </div>
       )}
@@ -214,5 +234,5 @@ const ghostBtn: React.CSSProperties = {
 };
 const ghostLink: React.CSSProperties = {
   background: "none", border: "none", cursor: "pointer",
-  fontFamily: "var(--font-assistant)", fontSize: "var(--text-caption)", color: "var(--text-tertiary)", padding: 0,
+  fontFamily: "var(--font-assistant)", fontSize: "13px", color: "var(--text-tertiary)", padding: 0,
 };

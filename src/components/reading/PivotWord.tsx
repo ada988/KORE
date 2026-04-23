@@ -31,7 +31,7 @@ export function PivotWord({ token, fontSize = "var(--reading-size)" }: Props) {
 
   return (
     <span
-      style={{ fontSize, lineHeight: 1, direction: "rtl", unicodeBidi: "isolate" }}
+      style={{ fontSize, lineHeight: 1, direction: "rtl", unicodeBidi: "isolate", fontFamily: "var(--reading-font, var(--font-heebo))" }}
       lang="he"
     >
       <span>{before}</span>

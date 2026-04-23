@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { getDb } from "@/lib/db";
+import { IconCheck, IconStar } from "@/components/ui/Icons";
 import type { ReviewCard } from "@/types/database";
 
 const LOCAL_USER_ID = "local";
@@ -67,7 +68,13 @@ export default function ReviewPage() {
     return (
       <div style={centerLayout}>
         <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-5)" }}>
-          <span style={{ fontSize: "48px" }}>✓</span>
+          <div style={{
+            width: "72px", height: "72px", borderRadius: "50%",
+            backgroundColor: "color-mix(in srgb, var(--comp-green) 15%, var(--bg-elevated))",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <IconCheck size={32} style={{ color: "var(--comp-green)" }} />
+          </div>
           <h1 style={titleStyle}>אין כרטיסיות לחזרה</h1>
           <p style={{ fontFamily: "var(--font-assistant)", color: "var(--text-secondary)", maxWidth: "280px", lineHeight: 1.6, fontSize: "var(--ui-size)" }}>
             כרטיסיות נוצרות אוטומטית ממילים ושאלות שסומנו לחזרה.
@@ -83,7 +90,13 @@ export default function ReviewPage() {
     return (
       <div style={centerLayout}>
         <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-5)" }}>
-          <span style={{ fontSize: "48px" }}>🎉</span>
+          <div style={{
+            width: "72px", height: "72px", borderRadius: "50%",
+            backgroundColor: "color-mix(in srgb, var(--focus-amber) 15%, var(--bg-elevated))",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <IconStar size={32} style={{ color: "var(--focus-amber)" }} />
+          </div>
           <h1 style={titleStyle}>סיימת את החזרה!</h1>
           <p style={{ fontFamily: "var(--font-assistant)", color: "var(--text-secondary)", fontSize: "var(--ui-size)" }}>
             עברת על <bdi>{dueCards.length}</bdi> כרטיסיות.

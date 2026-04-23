@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { IconEye, IconTarget, IconCheck } from "@/components/ui/Icons";
 
 type Phase = "intro" | "playing" | "done";
 
@@ -61,7 +62,13 @@ export default function SaccadePage() {
     return (
       <div style={centerLayout}>
         <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-5)" }}>
-          <div style={{ fontSize: "48px" }}>👁</div>
+          <div style={{
+            width: "72px", height: "72px", borderRadius: "20px",
+            backgroundColor: "color-mix(in srgb, var(--focus-amber) 15%, var(--bg-elevated))",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <IconEye size={32} style={{ color: "var(--focus-amber)" }} />
+          </div>
           <h1 style={titleStyle}>תנועות עיניים</h1>
           <p style={{ fontFamily: "var(--font-assistant)", color: "var(--text-secondary)", fontSize: "var(--ui-size)", maxWidth: "300px", lineHeight: 1.6 }}>
             נקודה תופיע משמאל או מימין. לחץ על הצד הנכון מהר ככל האפשר.
@@ -69,19 +76,27 @@ export default function SaccadePage() {
             האתגר גובר עם הזמן — כל סיבוב מהיר יותר.
           </p>
           <button onClick={start} style={accentBtn}>התחל</button>
-          <button onClick={() => router.back()} style={ghostLink}>← חזור</button>
+          <button onClick={() => router.back()} style={ghostLink}>חזור</button>
         </div>
       </div>
     );
   }
 
   if (phase === "done") {
+    const scoreColor = accuracy >= 80 ? "var(--comp-green)" : accuracy >= 60 ? "var(--focus-amber)" : "var(--root-red)";
+    const DoneIcon = accuracy >= 80 ? IconTarget : IconEye;
     return (
       <div style={centerLayout}>
         <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-5)" }}>
-          <div style={{ fontSize: "48px" }}>{accuracy >= 80 ? "🎯" : "👁"}</div>
+          <div style={{
+            width: "72px", height: "72px", borderRadius: "50%",
+            backgroundColor: `color-mix(in srgb, ${scoreColor} 15%, var(--bg-elevated))`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <DoneIcon size={32} style={{ color: scoreColor }} />
+          </div>
           <h1 style={titleStyle}>סיבוב הסתיים</h1>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: "32px", fontWeight: 700, color: accuracy >= 80 ? "var(--comp-green)" : "var(--focus-amber)" }}>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: "40px", fontWeight: 700, color: scoreColor }}>
             {accuracy}%
           </p>
           <p style={{ fontFamily: "var(--font-assistant)", color: "var(--text-tertiary)", fontSize: "14px" }}>
@@ -99,16 +114,16 @@ export default function SaccadePage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Progress bar */}
-      <div style={{ height: "4px", backgroundColor: "var(--bg-elevated)", direction: "rtl" }}>
+      <div style={{ height: "3px", backgroundColor: "var(--bg-elevated)", direction: "rtl" }}>
         <div style={{
           height: "100%", width: `${progress * 100}%`,
           backgroundColor: "var(--accent)", transition: "width 0.3s",
         }} />
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", padding: "var(--space-3) var(--space-4)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "var(--space-3) var(--space-4)" }}>
         <button onClick={() => { if (timeoutRef.current) clearTimeout(timeoutRef.current); setPhase("intro"); }} style={ghostLink}>
-          ← עצור
+          עצור
         </button>
         <span style={{ fontFamily: "var(--font-mono)", fontSize: "13px", color: "var(--text-tertiary)" }}>
           <bdi>{round}</bdi>/<bdi>{ROUNDS}</bdi>
@@ -117,45 +132,44 @@ export default function SaccadePage() {
 
       {/* Two tap zones */}
       <div style={{ flex: 1, display: "flex", minHeight: "300px" }}>
-        {/* Right zone (RTL: displayed on the right = visual left) */}
         <button
           onClick={() => handleTap("left")}
           style={{
             flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-            backgroundColor: !waiting && side === "left" ? "color-mix(in srgb, var(--accent) 12%, var(--bg-surface))" : "var(--bg)",
+            backgroundColor: !waiting && side === "left" ? "color-mix(in srgb, var(--accent) 8%, var(--bg-surface))" : "var(--bg)",
             border: "none", cursor: "pointer",
-            transition: "background-color 0.1s",
+            transition: "background-color 0.08s",
             WebkitTapHighlightColor: "transparent",
           }}
         >
           {!waiting && side === "left" && (
             <div style={{
-              width: "48px", height: "48px", borderRadius: "50%",
+              width: "52px", height: "52px", borderRadius: "50%",
               backgroundColor: "var(--accent)",
-              boxShadow: "0 0 0 12px color-mix(in srgb, var(--accent) 20%, transparent)",
+              boxShadow: "0 0 0 16px color-mix(in srgb, var(--accent) 18%, transparent)",
+              transition: "opacity 0.1s",
             }} />
           )}
         </button>
 
-        {/* Center divider */}
         <div style={{ width: "1px", backgroundColor: "var(--border)", alignSelf: "stretch" }} />
 
-        {/* Left zone (RTL: displayed on the left = visual right) */}
         <button
           onClick={() => handleTap("right")}
           style={{
             flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-            backgroundColor: !waiting && side === "right" ? "color-mix(in srgb, var(--accent) 12%, var(--bg-surface))" : "var(--bg)",
+            backgroundColor: !waiting && side === "right" ? "color-mix(in srgb, var(--accent) 8%, var(--bg-surface))" : "var(--bg)",
             border: "none", cursor: "pointer",
-            transition: "background-color 0.1s",
+            transition: "background-color 0.08s",
             WebkitTapHighlightColor: "transparent",
           }}
         >
           {!waiting && side === "right" && (
             <div style={{
-              width: "48px", height: "48px", borderRadius: "50%",
+              width: "52px", height: "52px", borderRadius: "50%",
               backgroundColor: "var(--accent)",
-              boxShadow: "0 0 0 12px color-mix(in srgb, var(--accent) 20%, transparent)",
+              boxShadow: "0 0 0 16px color-mix(in srgb, var(--accent) 18%, transparent)",
+              transition: "opacity 0.1s",
             }} />
           )}
         </button>
@@ -183,5 +197,5 @@ const ghostBtn: React.CSSProperties = {
 };
 const ghostLink: React.CSSProperties = {
   background: "none", border: "none", cursor: "pointer",
-  fontFamily: "var(--font-assistant)", fontSize: "var(--text-caption)", color: "var(--text-tertiary)", padding: 0,
+  fontFamily: "var(--font-assistant)", fontSize: "13px", color: "var(--text-tertiary)", padding: 0,
 };

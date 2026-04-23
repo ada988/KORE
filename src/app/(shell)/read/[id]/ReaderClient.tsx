@@ -8,6 +8,7 @@ import { getDemoPassage, type DemoPassage, type DemoQuestion } from "@/lib/demo-
 import { getDb } from "@/lib/db";
 import { saveSession } from "@/lib/session-utils";
 import { useRsvpStore } from "@/stores/rsvp";
+import { IconCheck } from "@/components/ui/Icons";
 import type { ProcessedPassage } from "@/types/token";
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -23,6 +24,7 @@ export default function ReaderClient({ params }: PageProps) {
   const [phase, setPhase] = useState<"reading" | "quiz" | "done">("reading");
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
   const [score, setScore] = useState<{ correct: number; total: number } | null>(null);
+  const [questionResults, setQuestionResults] = useState<Record<string, { correct: boolean; correctId: string }>>({});
   const startTimeRef = useRef(Date.now());
 
   useEffect(() => {
@@ -78,11 +80,15 @@ export default function ReaderClient({ params }: PageProps) {
   const handleQuizSubmit = useCallback(() => {
     const questions = demoPassage?.questions ?? [];
     let correct = 0;
+    const results: Record<string, { correct: boolean; correctId: string }> = {};
     for (const q of questions) {
       const ans = quizAnswers[q.id];
       const correctOpt = q.options.find((o) => o.is_correct);
-      if (ans && correctOpt && ans === correctOpt.id) correct++;
+      const isCorrect = !!(ans && correctOpt && ans === correctOpt.id);
+      if (isCorrect) correct++;
+      results[q.id] = { correct: isCorrect, correctId: correctOpt?.id ?? "" };
     }
+    setQuestionResults(results);
     setScore({ correct, total: questions.length });
     setPhase("done");
   }, [quizAnswers, demoPassage]);
@@ -149,54 +155,84 @@ export default function ReaderClient({ params }: PageProps) {
   // Done screen
   const durationSec = Math.round((Date.now() - startTimeRef.current) / 1000);
   const wpmActual = durationSec > 0 ? Math.round((passage.wordCount / durationSec) * 60) : wpm;
+  const scoreColor = score ? (score.correct >= score.total * 0.7 ? "var(--comp-green)" : "var(--focus-amber)") : "var(--comp-green)";
   return (
-    <div style={centerLayout}>
-      <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-5)" }}>
-        <div style={{ fontSize: "48px" }}>✓</div>
+    <div style={{ padding: "var(--space-5)", display: "flex", flexDirection: "column", gap: "var(--space-5)", overflowY: "auto" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-4)", textAlign: "center" }}>
+        <div style={{
+          width: "64px", height: "64px", borderRadius: "50%",
+          backgroundColor: `color-mix(in srgb, ${scoreColor} 15%, var(--bg-elevated))`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <IconCheck size={28} style={{ color: scoreColor }} />
+        </div>
         <h1 style={{ fontFamily: "var(--font-rubik)", fontWeight: 700, fontSize: "var(--text-h1)", color: "var(--text-primary)" }}>
           סיימת!
         </h1>
+      </div>
 
-        {score && (
-          <div style={{
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
+        {[
+          { label: "מילים", value: passage.wordCount.toLocaleString("he-IL") },
+          { label: "מ״ד", value: String(wpmActual) },
+          ...(score ? [{ label: "הבנה", value: `${score.correct}/${score.total}` }] : []),
+        ].map(({ label, value }) => (
+          <div key={label} style={{
             backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)",
-            borderRadius: "16px", padding: "var(--space-5)",
-            display: "flex", flexDirection: "column", gap: "var(--space-3)", width: "100%", maxWidth: "320px",
+            borderRadius: "12px", padding: "var(--space-4)", textAlign: "center",
           }}>
-            <p style={{ fontFamily: "var(--font-assistant)", color: "var(--text-secondary)", textAlign: "center" }}>
-              הבנת הנקרא: <strong style={{ color: score.correct >= score.total * 0.7 ? "var(--comp-green)" : "var(--focus-amber)" }}>
-                {score.correct}/{score.total}
-              </strong>
-            </p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: "24px", fontWeight: 700, color: "var(--text-primary)", direction: "ltr" }}>{value}</p>
+            <p style={{ fontFamily: "var(--font-assistant)", fontSize: "12px", color: "var(--text-tertiary)" }}>{label}</p>
           </div>
-        )}
+        ))}
+      </div>
 
-        <div style={{
-          display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)",
-          width: "100%", maxWidth: "320px",
-        }}>
-          {[
-            { label: "מילים", value: passage.wordCount.toLocaleString("he-IL") },
-            { label: "מ״ד", value: String(wpmActual) },
-          ].map(({ label, value }) => (
-            <div key={label} style={{
-              backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)",
-              borderRadius: "12px", padding: "var(--space-4)", textAlign: "center",
-            }}>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: "24px", fontWeight: 700, color: "var(--text-primary)", direction: "ltr" }}>{value}</p>
-              <p style={{ fontFamily: "var(--font-assistant)", fontSize: "12px", color: "var(--text-tertiary)" }}>{label}</p>
-            </div>
-          ))}
+      {/* Per-question feedback */}
+      {score && demoPassage?.questions && Object.keys(questionResults).length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+          <h2 style={{ fontFamily: "var(--font-assistant)", fontWeight: 600, fontSize: "12px", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            תשובות
+          </h2>
+          {demoPassage.questions.map((q) => {
+            const result = questionResults[q.id];
+            const userAnswerId = quizAnswers[q.id];
+            const correctOpt = q.options.find((o) => o.id === result?.correctId);
+            const userOpt = q.options.find((o) => o.id === userAnswerId);
+            const isCorrect = result?.correct ?? false;
+            const borderColor = isCorrect ? "var(--comp-green)" : "var(--error-red)";
+            return (
+              <div key={q.id} style={{
+                backgroundColor: "var(--bg-surface)", borderRadius: "12px",
+                padding: "var(--space-4)", border: "1px solid var(--border)",
+                borderInlineStart: `3px solid ${borderColor}`,
+              }}>
+                <p style={{ fontFamily: "var(--font-heebo)", fontSize: "14px", color: "var(--text-primary)", marginBottom: "var(--space-2)", lineHeight: 1.5 }}>
+                  {q.question_text}
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {!isCorrect && userOpt && (
+                    <p style={{ fontFamily: "var(--font-assistant)", fontSize: "13px", color: "var(--error-red)" }}>
+                      ✕ תשובתך: {userOpt.text}
+                    </p>
+                  )}
+                  <p style={{ fontFamily: "var(--font-assistant)", fontSize: "13px", color: "var(--comp-green)", display: "flex", alignItems: "center", gap: "5px" }}>
+                    <IconCheck size={12} style={{ color: "var(--comp-green)", flexShrink: 0 }} />
+                    {isCorrect ? "נכון" : `התשובה הנכונה: ${correctOpt?.text ?? ""}`}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
         </div>
+      )}
 
-        <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap", justifyContent: "center" }}>
-          <button onClick={() => { setPhase("reading"); startTimeRef.current = Date.now(); }} style={accentBtn}>
-            קרא שוב
-          </button>
-          <button onClick={() => router.push("/read")} style={ghostBtn}>
-            קטע חדש
-          </button>
-        </div>
+      <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap", justifyContent: "center" }}>
+        <button onClick={() => { setPhase("reading"); startTimeRef.current = Date.now(); }} style={accentBtn}>
+          קרא שוב
+        </button>
+        <button onClick={() => router.push("/read")} style={ghostBtn}>
+          קטע חדש
+        </button>
       </div>
     </div>
   );

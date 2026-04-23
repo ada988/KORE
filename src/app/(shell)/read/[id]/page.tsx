@@ -9,6 +9,12 @@ export function generateStaticParams() {
     { id: "demo-brain" },
     { id: "demo-society" },
     { id: "demo-literary" },
+    { id: "demo-nature" },
+    { id: "demo-history" },
+    { id: "demo-ai" },
+    { id: "demo-philosophy" },
+    { id: "demo-sport" },
+    { id: "demo-poetry" },
   ];
 }
 

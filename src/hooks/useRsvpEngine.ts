@@ -69,6 +69,10 @@ export function useRsvpEngine(tokens: Token[]): UseRsvpEngineReturn {
     engineRef.current?.setChunkSize(chunkSize);
   }, [chunkSize]);
 
+  useEffect(() => {
+    engineRef.current?.setAdaptivePauses(adaptivePauses);
+  }, [adaptivePauses]);
+
   const play = useCallback(() => {
     engineRef.current?.start();
     setIsPlaying(true);

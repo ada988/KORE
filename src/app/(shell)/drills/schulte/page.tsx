@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { IconGrid, IconTrophy, IconCheck } from "@/components/ui/Icons";
 
 const SIZE = 5;
 const TOTAL = SIZE * SIZE;
@@ -59,23 +60,33 @@ export default function SchultePage() {
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
   const formatTime = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+  const isNewBest = bestMs === elapsed && phase === "done";
 
   if (phase === "intro") {
     return (
       <div style={centerLayout}>
         <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-5)" }}>
-          <div style={{ fontSize: "48px" }}>🟦</div>
+          <div style={{
+            width: "72px", height: "72px", borderRadius: "20px",
+            backgroundColor: "color-mix(in srgb, var(--accent) 15%, var(--bg-elevated))",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <IconGrid size={32} style={{ color: "var(--accent)" }} />
+          </div>
           <h1 style={titleStyle}>טבלת שולטה</h1>
           <p style={{ fontFamily: "var(--font-assistant)", color: "var(--text-secondary)", fontSize: "var(--ui-size)", maxWidth: "280px", lineHeight: 1.6 }}>
             מצא את המספרים 1 עד 25 לפי הסדר, במהירות האפשרית.
-            <br/><br/>
+            <br /><br />
             הכוונה <strong>לא</strong> לנייד את הראש — רק את העיניים.
           </p>
-          {bestMs && <p style={{ fontFamily: "var(--font-mono)", fontSize: "13px", color: "var(--text-tertiary)" }}>
-            שיא אישי: <bdi>{formatTime(bestMs)}</bdi>
-          </p>}
+          {bestMs !== null && (
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", color: "var(--focus-amber)" }}>
+              <IconTrophy size={14} />
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "13px" }}>שיא: <bdi>{formatTime(bestMs)}</bdi></span>
+            </div>
+          )}
           <button onClick={startGame} style={accentBtn}>התחל</button>
-          <button onClick={() => router.back()} style={ghostLink}>← חזור</button>
+          <button onClick={() => router.back()} style={ghostLink}>חזור</button>
         </div>
       </div>
     );
@@ -85,15 +96,22 @@ export default function SchultePage() {
     return (
       <div style={centerLayout}>
         <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-5)" }}>
-          <div style={{ fontSize: "48px" }}>✓</div>
+          <div style={{
+            width: "72px", height: "72px", borderRadius: "50%",
+            backgroundColor: "color-mix(in srgb, var(--comp-green) 15%, var(--bg-elevated))",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <IconCheck size={32} style={{ color: "var(--comp-green)" }} />
+          </div>
           <h1 style={titleStyle}>סיימת!</h1>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: "28px", fontWeight: 700, color: "var(--text-primary)", direction: "ltr" }}>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: "36px", fontWeight: 700, color: "var(--text-primary)", direction: "ltr" }}>
             {formatTime(elapsed)}
           </p>
-          {bestMs === elapsed && (
-            <p style={{ fontFamily: "var(--font-assistant)", color: "var(--comp-green)", fontSize: "14px" }}>
-              🏆 שיא אישי חדש!
-            </p>
+          {isNewBest && (
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", color: "var(--focus-amber)" }}>
+              <IconTrophy size={16} />
+              <span style={{ fontFamily: "var(--font-assistant)", fontSize: "14px", fontWeight: 600 }}>שיא אישי חדש!</span>
+            </div>
           )}
           <div style={{ display: "flex", gap: "var(--space-3)" }}>
             <button onClick={startGame} style={accentBtn}>שחק שוב</button>
@@ -110,19 +128,19 @@ export default function SchultePage() {
     <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: "var(--space-4)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-4)" }}>
         <button onClick={() => { if (timerRef.current) clearInterval(timerRef.current); setPhase("intro"); }} style={ghostLink}>
-          ← עצור
+          עצור
         </button>
-        <p style={{ fontFamily: "var(--font-mono)", fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", direction: "ltr" }}>
+        <p style={{ fontFamily: "var(--font-mono)", fontSize: "24px", fontWeight: 700, color: "var(--text-primary)", direction: "ltr" }}>
           <bdi>{secStr}</bdi>s
         </p>
-        <p style={{ fontFamily: "var(--font-mono)", fontSize: "14px", color: "var(--accent)", fontWeight: 700 }}>
-          → <bdi>{next}</bdi>
+        <p style={{ fontFamily: "var(--font-mono)", fontSize: "15px", color: "var(--accent)", fontWeight: 700 }}>
+          <bdi>{next}</bdi>
         </p>
       </div>
 
       <div style={{
         display: "grid", gridTemplateColumns: `repeat(${SIZE}, 1fr)`,
-        gap: "var(--space-2)", flex: 1, maxWidth: "360px", margin: "0 auto", width: "100%",
+        gap: "var(--space-2)", flex: 1, maxWidth: "380px", margin: "0 auto", width: "100%",
       }}>
         {grid.map((n, i) => {
           const done = n < next;
@@ -134,19 +152,19 @@ export default function SchultePage() {
               style={{
                 aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center",
                 backgroundColor: done
-                  ? "color-mix(in srgb, var(--comp-green) 20%, var(--bg-elevated))"
+                  ? "color-mix(in srgb, var(--comp-green) 18%, var(--bg-elevated))"
                   : isFlash
-                  ? "color-mix(in srgb, var(--error-red) 20%, var(--bg-elevated))"
+                  ? "color-mix(in srgb, var(--error-red) 18%, var(--bg-elevated))"
                   : "var(--bg-surface)",
-                border: `1px solid ${done ? "var(--comp-green)" : isFlash ? "var(--error-red)" : "var(--border)"}`,
+                border: `1px solid ${done ? "color-mix(in srgb, var(--comp-green) 40%, transparent)" : isFlash ? "color-mix(in srgb, var(--error-red) 40%, transparent)" : "var(--border)"}`,
                 borderRadius: "10px", cursor: "pointer",
-                fontFamily: "var(--font-mono)", fontSize: "18px", fontWeight: 700,
+                fontFamily: "var(--font-mono)", fontSize: "17px", fontWeight: 700,
                 color: done ? "var(--comp-green)" : "var(--text-primary)",
-                transition: "background-color 0.15s, border-color 0.15s",
+                transition: "background-color 0.12s, border-color 0.12s",
                 WebkitTapHighlightColor: "transparent",
               }}
             >
-              {done ? "✓" : n}
+              {done ? <IconCheck size={14} /> : n}
             </button>
           );
         })}
@@ -160,8 +178,7 @@ const centerLayout: React.CSSProperties = {
   padding: "var(--space-6)", minHeight: "80vh",
 };
 const titleStyle: React.CSSProperties = {
-  fontFamily: "var(--font-rubik)", fontWeight: 700, fontSize: "var(--text-h1)",
-  color: "var(--text-primary)",
+  fontFamily: "var(--font-rubik)", fontWeight: 700, fontSize: "var(--text-h1)", color: "var(--text-primary)",
 };
 const accentBtn: React.CSSProperties = {
   padding: "var(--space-3) var(--space-8)", backgroundColor: "var(--accent)", color: "#fff",
@@ -175,5 +192,5 @@ const ghostBtn: React.CSSProperties = {
 };
 const ghostLink: React.CSSProperties = {
   background: "none", border: "none", cursor: "pointer",
-  fontFamily: "var(--font-assistant)", fontSize: "var(--text-caption)", color: "var(--text-tertiary)", padding: 0,
+  fontFamily: "var(--font-assistant)", fontSize: "13px", color: "var(--text-tertiary)", padding: 0,
 };

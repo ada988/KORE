@@ -45,8 +45,9 @@ export default function SettingsPage() {
           label="גופן קריאה"
           options={[
             { value: "heebo", label: "Heebo" },
-            { value: "frank", label: "Frank Ruehl" },
+            { value: "frank", label: "Frank" },
             { value: "assistant", label: "Assistant" },
+            { value: "rubik", label: "Rubik" },
           ]}
           value={fontFamily}
           onChange={(v) => setFontFamily(v as FontFamily)}
