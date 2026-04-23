@@ -4,13 +4,13 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { DEMO_PASSAGES } from "@/lib/demo-passages";
 import { savePassage, getSavedPassages, deletePassage, getBookmark } from "@/lib/session-utils";
-import { extractArticle } from "@/lib/extract";
+import { extractArticle, fetchFeed, type RssItem } from "@/lib/extract";
 import { tokenizeText } from "@/lib/tokenize";
 import * as haptics from "@/lib/haptics";
 import { IconLink, IconBookmark, IconShare, IconTrash, IconPlus } from "@/components/ui/Icons";
 import type { Passage } from "@/types/database";
 
-type View = "browse" | "paste" | "url";
+type View = "browse" | "paste" | "url" | "rss";
 type Category = "all" | "library" | "saved" | "easy" | "medium" | "hard" | "pet";
 
 export default function ReadPage() {
@@ -18,6 +18,9 @@ export default function ReadPage() {
   const [view, setView] = useState<View>("browse");
   const [text, setText] = useState("");
   const [urlValue, setUrlValue] = useState("");
+  const [rssUrl, setRssUrl] = useState("");
+  const [rssItems, setRssItems] = useState<RssItem[]>([]);
+  const [rssFeedTitle, setRssFeedTitle] = useState("");
   const [title, setTitle] = useState("");
   const [savedPassages, setSavedPassages] = useState<Passage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -41,6 +44,41 @@ export default function ReadPage() {
     haptics.success();
     router.push(`/read/${id}`);
   }, [text, title, router]);
+
+  const handleFetchFeed = useCallback(async () => {
+    if (!rssUrl.trim()) return;
+    setLoading(true);
+    try {
+      const { items, feedTitle } = await fetchFeed(rssUrl.trim());
+      setRssItems(items);
+      setRssFeedTitle(feedTitle);
+      haptics.success();
+    } catch {
+      haptics.error();
+      flash("לא הצלחנו לטעון את הפיד");
+    } finally {
+      setLoading(false);
+    }
+  }, [rssUrl]);
+
+  const handleRssItemOpen = useCallback(async (item: RssItem) => {
+    setLoading(true);
+    try {
+      const data = await extractArticle(item.url);
+      const tokenized = tokenizeText(data.body, "tmp", data.title || item.title);
+      const id = await savePassage(
+        data.title || item.title, data.body,
+        tokenized.wordCount, tokenized.charCount,
+        { source_type: "url", source_url: item.url, domain: data.siteName ?? null },
+      );
+      haptics.success();
+      router.push(`/read/${id}`);
+    } catch {
+      haptics.error();
+      flash("לא הצלחנו לטעון את הכתבה");
+      setLoading(false);
+    }
+  }, [router]);
 
   const handleUrlImport = useCallback(async () => {
     if (!urlValue.trim()) return;
@@ -128,6 +166,66 @@ export default function ReadPage() {
     );
   }
 
+  if (view === "rss") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", padding: "var(--space-4)", gap: "var(--space-4)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+          <button onClick={() => setView("browse")} style={backBtn}>← חזור</button>
+          <h1 style={pageTitle}>פידים (RSS)</h1>
+        </div>
+        <p style={{ fontFamily: "var(--font-assistant)", fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+          הדבק כתובת פיד RSS/Atom של אתר חדשות, בלוג, או פודקאסט.
+        </p>
+        <div style={{ display: "flex", gap: "var(--space-2)" }}>
+          <input
+            value={rssUrl}
+            onChange={(e) => setRssUrl(e.target.value)}
+            placeholder="https://site.co.il/feed"
+            dir="ltr"
+            style={{
+              flex: 1, fontFamily: "var(--font-mono)", fontSize: "13px",
+              color: "var(--text-primary)", backgroundColor: "var(--bg-surface)",
+              border: "1px solid var(--border)", borderRadius: "10px",
+              padding: "var(--space-3)", outline: "none",
+            }}
+          />
+          <button onClick={handleFetchFeed} disabled={!rssUrl.trim() || loading} style={{ ...accentBtn, opacity: !rssUrl.trim() || loading ? 0.5 : 1 }}>
+            {loading ? "..." : "טען"}
+          </button>
+        </div>
+        {rssFeedTitle && (
+          <p style={{ fontFamily: "var(--font-assistant)", fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>
+            {rssFeedTitle}
+          </p>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+          {rssItems.map((item) => (
+            <button
+              key={item.url}
+              onClick={() => handleRssItemOpen(item)}
+              disabled={loading}
+              style={{
+                backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)",
+                borderRadius: "12px", padding: "var(--space-3) var(--space-4)",
+                textAlign: "right", cursor: loading ? "wait" : "pointer",
+                direction: "rtl",
+              }}
+            >
+              <p style={{ fontFamily: "var(--font-heebo)", fontSize: "14px", fontWeight: 500, color: "var(--text-primary)", marginBottom: "3px" }}>
+                {item.title}
+              </p>
+              {item.summary && (
+                <p style={{ fontFamily: "var(--font-assistant)", fontSize: "12px", color: "var(--text-tertiary)", lineHeight: 1.5 }}>
+                  {item.summary}
+                </p>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (view === "url") {
     return (
       <div style={{ display: "flex", flexDirection: "column", padding: "var(--space-4)", gap: "var(--space-4)" }}>
@@ -185,6 +283,11 @@ export default function ReadPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1 style={pageTitle}>קריאה</h1>
         <div style={{ display: "flex", gap: "var(--space-2)" }}>
+          <button onClick={() => { setView("rss"); haptics.tap(); }} style={iconBtn} aria-label="RSS">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/>
+            </svg>
+          </button>
           <button onClick={() => { setView("url"); haptics.tap(); }} style={iconBtn} aria-label="ייבא מכתובת">
             <IconLink size={16} />
           </button>

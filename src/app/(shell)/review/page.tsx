@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { getDb } from "@/lib/db";
 import { IconCheck, IconStar, IconPlus } from "@/components/ui/Icons";
 import * as haptics from "@/lib/haptics";
+import { scheduleNext } from "@/lib/fsrs";
 import type { ReviewCard } from "@/types/database";
 
 const LOCAL_USER_ID = "local";
@@ -83,20 +84,10 @@ export default function ReviewPage() {
     if (!card) return;
     if (rating === 1) haptics.error(); else haptics.tap();
 
-    // Simple scheduling without full FSRS: multiply stability by rating factor
-    const factor = [0.5, 1, 2, 4][rating - 1]!;
-    const nextDays = Math.max(1, Math.round((card.scheduled_days || 1) * factor));
-    const nextDue = new Date(Date.now() + nextDays * 86400000).toISOString();
-
+    // Full FSRS scheduling via ts-fsrs
+    const update = scheduleNext(card, rating);
     const db = getDb();
-    await db.review_cards.update(card.id, {
-      due: nextDue,
-      reps: card.reps + 1,
-      lapses: rating === 1 ? card.lapses + 1 : card.lapses,
-      scheduled_days: nextDays,
-      last_review: new Date().toISOString(),
-      state: rating <= 1 ? 1 : 2,
-    });
+    await db.review_cards.update(card.id, update);
 
     if (idx + 1 >= dueCards.length) {
       setPhase("done");

@@ -10,9 +10,16 @@ import type { Streak, DailyStats, ReadingSession } from "@/types/database";
 
 export default function HomePage() {
   const dailyGoal = useAppStore((s) => s.dailyGoalMinutes);
+  const onboarded = useAppStore((s) => s.onboarded);
   const [streak, setStreak] = useState<Streak | null>(null);
   const [todayStats, setTodayStats] = useState<DailyStats | null>(null);
   const [lastSession, setLastSession] = useState<ReadingSession | null>(null);
+
+  useEffect(() => {
+    if (!onboarded && typeof window !== "undefined") {
+      window.location.href = "/onboarding";
+    }
+  }, [onboarded]);
 
   const load = useCallback(async () => {
     const [s, stats, sessions] = await Promise.all([
@@ -143,6 +150,34 @@ export default function HomePage() {
           ))}
         </div>
       </div>
+
+      {/* PET simulation */}
+      <Link
+        href="/pet"
+        style={{
+          display: "flex", alignItems: "center", gap: "var(--space-4)",
+          backgroundColor: "color-mix(in srgb, var(--accent) 8%, var(--bg-surface))",
+          border: "1px solid var(--accent)",
+          borderRadius: "14px", padding: "var(--space-4)", textDecoration: "none",
+        }}
+      >
+        <div style={{
+          width: "44px", height: "44px", borderRadius: "11px",
+          backgroundColor: "color-mix(in srgb, var(--accent) 22%, var(--bg-elevated))",
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--accent)", fontWeight: 700 }}>PET</span>
+        </div>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontFamily: "var(--font-heebo)", fontWeight: 600, fontSize: "15px", color: "var(--text-primary)", marginBottom: "3px" }}>
+            סימולציית פסיכומטרי
+          </p>
+          <p style={{ fontFamily: "var(--font-assistant)", fontSize: "12px", color: "var(--text-tertiary)" }}>
+            6 דקות · 5 שאלות · קריאה מכוונת שאלה
+          </p>
+        </div>
+        <IconChevronRight size={16} style={{ color: "var(--accent)", transform: "rotate(180deg)" }} />
+      </Link>
 
       {/* Daily drill */}
       <div>

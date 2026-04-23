@@ -23,6 +23,12 @@ type AppState = {
   analyticsOptOut: boolean;
   reminderEnabled: boolean;
   reminderHour: number;
+  /** Anthropic API key (optional, used for client-side quiz/Nakdan calls) */
+  anthropicKey: string;
+  /** Mind-wandering probes during paginated reading */
+  mindWanderProbes: boolean;
+  /** Baseline WPM from onboarding calibration */
+  baselineWpm: number | null;
 
   setTheme: (t: Theme) => void;
   setFontFamily: (f: FontFamily) => void;
@@ -38,6 +44,9 @@ type AppState = {
   setAnalyticsOptOut: (v: boolean) => void;
   setReminderEnabled: (v: boolean) => void;
   setReminderHour: (h: number) => void;
+  setAnthropicKey: (k: string) => void;
+  setMindWanderProbes: (v: boolean) => void;
+  setBaselineWpm: (n: number | null) => void;
   resetAll: () => void;
 };
 
@@ -56,6 +65,9 @@ const DEFAULTS = {
   analyticsOptOut: false,
   reminderEnabled: false,
   reminderHour: 20,
+  anthropicKey: "",
+  mindWanderProbes: true,
+  baselineWpm: null as number | null,
 };
 
 export const useAppStore = create<AppState>()(
@@ -77,6 +89,9 @@ export const useAppStore = create<AppState>()(
       setAnalyticsOptOut: (analyticsOptOut) => set({ analyticsOptOut }),
       setReminderEnabled: (reminderEnabled) => set({ reminderEnabled }),
       setReminderHour: (h) => set({ reminderHour: Math.min(23, Math.max(0, h)) }),
+      setAnthropicKey: (anthropicKey) => set({ anthropicKey }),
+      setMindWanderProbes: (mindWanderProbes) => set({ mindWanderProbes }),
+      setBaselineWpm: (baselineWpm) => set({ baselineWpm }),
       resetAll: () => set({ ...DEFAULTS, onboarded: true }),
     }),
     { name: "kore-app-prefs", version: 2 }

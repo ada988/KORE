@@ -16,6 +16,75 @@ export type ExtractResult = {
   url: string;
 };
 
+export type RssItem = {
+  title: string;
+  url: string;
+  summary: string;
+  pubDate?: string | undefined;
+};
+
+/**
+ * Fetch an RSS or Atom feed via r.jina.ai proxy (returns text) and parse to items.
+ */
+export async function fetchFeed(feedUrl: string): Promise<{ feedTitle: string; items: RssItem[] }> {
+  const parsed = new URL(feedUrl);
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("unsupported protocol");
+  }
+
+  // Use allorigins for raw XML pass-through — r.jina.ai converts to text
+  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(feedUrl)}`;
+  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15_000) });
+  if (!res.ok) throw new Error(`feed fetch failed (${res.status})`);
+  const xml = await res.text();
+
+  const feedTitle = /<channel>[\s\S]*?<title[^>]*>([\s\S]*?)<\/title>/i.exec(xml)?.[1]?.trim()
+    ?? /<feed[^>]*>[\s\S]*?<title[^>]*>([\s\S]*?)<\/title>/i.exec(xml)?.[1]?.trim()
+    ?? parsed.hostname;
+
+  const items: RssItem[] = [];
+  // RSS <item>
+  const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = itemRegex.exec(xml)) !== null) {
+    const block = m[1] ?? "";
+    const title = strip(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(block)?.[1] ?? "");
+    const url = strip(/<link[^>]*>([\s\S]*?)<\/link>/i.exec(block)?.[1] ?? "");
+    const desc = strip(/<description[^>]*>([\s\S]*?)<\/description>/i.exec(block)?.[1] ?? "");
+    const pubDate = strip(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i.exec(block)?.[1] ?? "");
+    if (title && url) items.push({ title, url, summary: desc.slice(0, 200), pubDate: pubDate || undefined });
+  }
+  // Atom <entry>
+  if (items.length === 0) {
+    const entryRegex = /<entry>([\s\S]*?)<\/entry>/gi;
+    while ((m = entryRegex.exec(xml)) !== null) {
+      const block = m[1] ?? "";
+      const title = strip(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(block)?.[1] ?? "");
+      const url = /<link[^>]*href=["']([^"']+)["']/i.exec(block)?.[1] ?? "";
+      const summary = strip(/<summary[^>]*>([\s\S]*?)<\/summary>/i.exec(block)?.[1] ?? "");
+      if (title && url) items.push({ title, url, summary: summary.slice(0, 200) });
+    }
+  }
+
+  if (items.length === 0) throw new Error("no items");
+  return { feedTitle: strip(feedTitle), items: items.slice(0, 30) };
+}
+
+function strip(s: string): string {
+  return s
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export async function extractArticle(url: string): Promise<ExtractResult> {
   // Validate URL
   const parsed = new URL(url);

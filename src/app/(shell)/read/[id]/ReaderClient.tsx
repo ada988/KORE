@@ -9,8 +9,10 @@ import { getDemoPassage, type DemoPassage, type DemoQuestion } from "@/lib/demo-
 import { getDb } from "@/lib/db";
 import { saveSession, getBookmark, setBookmark, clearBookmark, checkAchievements } from "@/lib/session-utils";
 import { useRsvpStore } from "@/stores/rsvp";
+import { useAppStore } from "@/stores/app";
 import { IconCheck, IconBookmark } from "@/components/ui/Icons";
 import * as haptics from "@/lib/haptics";
+import { generateQuestions, type AIQuestion } from "@/lib/ai-questions";
 import type { ProcessedPassage } from "@/types/token";
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -21,9 +23,14 @@ export default function ReaderClient({ params }: PageProps) {
   const wpm = useRsvpStore((s) => s.wpm);
   const readingMode = useRsvpStore((s) => s.readingMode);
   const setReadingMode = useRsvpStore((s) => s.setReadingMode);
+  const anthropicKey = useAppStore((s) => s.anthropicKey);
 
   const [passage, setPassage] = useState<ProcessedPassage | null>(null);
+  const [passageBody, setPassageBody] = useState<string>("");
   const [demoPassage, setDemoPassage] = useState<DemoPassage | null>(null);
+  const [aiQuestions, setAiQuestions] = useState<AIQuestion[] | null>(null);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<"reading" | "quiz" | "done">("reading");
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
@@ -46,11 +53,13 @@ export default function ReaderClient({ params }: PageProps) {
         if (!demo) { setError("הקטע לא נמצא"); return; }
         setDemoPassage(demo);
         setPassage(tokenizeText(demo.body_raw, demo.id, demo.title));
+        setPassageBody(demo.body_raw);
       } else {
         const db = getDb();
         const saved = await db.passages.get(id);
         if (!saved) { setError("הקטע לא נמצא"); return; }
         setPassage(tokenizeText(saved.body_raw, saved.id, saved.title));
+        setPassageBody(saved.body_raw);
       }
     }
     load();
@@ -103,8 +112,37 @@ export default function ReaderClient({ params }: PageProps) {
     }
   }, [passage, id, wpm, demoPassage, readingMode]);
 
+  const handleGenerateAIQuestions = useCallback(async () => {
+    if (!passage || !anthropicKey.trim()) return;
+    setAiGenerating(true);
+    setAiError(null);
+    try {
+      const qs = await generateQuestions({
+        apiKey: anthropicKey,
+        passageTitle: passage.title,
+        passageBody,
+      });
+      setAiQuestions(qs);
+      setPhase("quiz");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "unknown";
+      setAiError(msg);
+      haptics.error();
+    } finally {
+      setAiGenerating(false);
+    }
+  }, [passage, anthropicKey, passageBody]);
+
+  const activeQuestions = demoPassage?.questions ?? (aiQuestions ? aiQuestions.map((q) => ({
+    id: q.id,
+    bloom_level: q.bloom_level as "remember" | "understand" | "analyze" | "evaluate",
+    question_text: q.question_text,
+    options: q.options,
+    explanation: q.explanation,
+  })) : null);
+
   const handleQuizSubmit = useCallback(() => {
-    const questions = demoPassage?.questions ?? [];
+    const questions = activeQuestions ?? [];
     let correct = 0;
     const results: Record<string, { correct: boolean; correctId: string }> = {};
     for (const q of questions) {
@@ -202,24 +240,25 @@ export default function ReaderClient({ params }: PageProps) {
     );
   }
 
-  if (phase === "quiz" && demoPassage?.questions) {
+  if (phase === "quiz" && activeQuestions) {
     return (
       <div style={{ padding: "var(--space-5)", display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
         <h1 style={{ fontFamily: "var(--font-rubik)", fontWeight: 700, fontSize: "var(--text-h2)", color: "var(--text-primary)" }}>
           שאלות הבנה
+          {aiQuestions && <span style={{ marginInlineStart: "8px", fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--accent)", fontWeight: 400 }}>AI</span>}
         </h1>
-        {demoPassage.questions.map((q) => (
+        {activeQuestions.map((q) => (
           <QuizQuestion
             key={q.id}
-            question={q}
+            question={q as DemoQuestion}
             selected={quizAnswers[q.id]}
             onSelect={(optId) => { setQuizAnswers((prev) => ({ ...prev, [q.id]: optId })); haptics.tap(); }}
           />
         ))}
         <button
           onClick={handleQuizSubmit}
-          disabled={Object.keys(quizAnswers).length < demoPassage.questions.length}
-          style={{ ...accentBtn, opacity: Object.keys(quizAnswers).length < demoPassage.questions.length ? 0.5 : 1 }}
+          disabled={Object.keys(quizAnswers).length < activeQuestions.length}
+          style={{ ...accentBtn, opacity: Object.keys(quizAnswers).length < activeQuestions.length ? 0.5 : 1 }}
         >
           בדוק תשובות
         </button>
@@ -281,12 +320,46 @@ export default function ReaderClient({ params }: PageProps) {
         ))}
       </div>
 
-      {score && demoPassage?.questions && Object.keys(questionResults).length > 0 && (
+      {/* AI quiz offer when no pre-baked quiz and user has key */}
+      {!demoPassage?.questions && !score && !aiQuestions && anthropicKey.trim() && (
+        <div style={{
+          backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)",
+          borderRadius: "14px", padding: "var(--space-4)",
+          display: "flex", alignItems: "center", gap: "var(--space-3)",
+        }}>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontFamily: "var(--font-heebo)", fontWeight: 600, fontSize: "15px", color: "var(--text-primary)", marginBottom: "2px" }}>
+              שאלות הבנה עם AI
+            </p>
+            <p style={{ fontFamily: "var(--font-assistant)", fontSize: "12px", color: "var(--text-tertiary)" }}>
+              בדוק את הבנתך עם Claude
+            </p>
+          </div>
+          <button
+            onClick={handleGenerateAIQuestions}
+            disabled={aiGenerating}
+            style={{ ...accentBtn, padding: "var(--space-2) var(--space-5)", fontSize: "14px", opacity: aiGenerating ? 0.6 : 1 }}
+          >
+            {aiGenerating ? "...יוצר" : "צור שאלות"}
+          </button>
+        </div>
+      )}
+      {aiError && (
+        <div style={{
+          backgroundColor: "color-mix(in srgb, var(--error-red) 10%, var(--bg-surface))",
+          border: "1px solid var(--error-red)", borderRadius: "10px", padding: "var(--space-3)",
+          fontFamily: "var(--font-assistant)", fontSize: "12px", color: "var(--error-red)",
+        }}>
+          שגיאה: {aiError}. בדוק את מפתח ה-API בהגדרות.
+        </div>
+      )}
+
+      {score && activeQuestions && Object.keys(questionResults).length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
           <h2 style={{ fontFamily: "var(--font-assistant)", fontWeight: 600, fontSize: "12px", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
             תשובות
           </h2>
-          {demoPassage.questions.map((q) => {
+          {(activeQuestions ?? []).map((q) => {
             const result = questionResults[q.id];
             const userAnswerId = quizAnswers[q.id];
             const correctOpt = q.options.find((o) => o.id === result?.correctId);

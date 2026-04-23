@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDb } from "@/lib/db";
+import { useAppStore } from "@/stores/app";
 import * as haptics from "@/lib/haptics";
 import type { ProcessedPassage } from "@/types/token";
 
@@ -22,7 +23,26 @@ export function PaginatedReader({ passage, onComplete, onIdxChange, startIdx = 0
   const text = useMemo(() => passage.tokens.map((t) => t.surface).join(""), [passage]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [savedCount, setSavedCount] = useState(0);
+  const [showProbe, setShowProbe] = useState(false);
   const completedRef = useRef(false);
+  const mindWanderProbes = useAppStore((s) => s.mindWanderProbes);
+  const probeCountRef = useRef(0);
+
+  // Mind-wandering probe: prompt every 75-120s (D'Mello 2017)
+  useEffect(() => {
+    if (!mindWanderProbes) return;
+    const schedule = () => {
+      const delay = 75000 + Math.random() * 45000;
+      return window.setTimeout(() => {
+        if (probeCountRef.current >= 4) return;
+        probeCountRef.current += 1;
+        setShowProbe(true);
+        haptics.bump();
+      }, delay);
+    };
+    const id = schedule();
+    return () => window.clearTimeout(id);
+  }, [mindWanderProbes]);
 
   useEffect(() => {
     // approximate startIdx → scroll position
@@ -140,6 +160,64 @@ export function PaginatedReader({ passage, onComplete, onIdxChange, startIdx = 0
       }}>
         סמן קטע באצבע/עכבר לשמור לחזרה
       </div>
+
+      {/* Mind-wandering probe */}
+      {showProbe && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: "fixed", inset: 0, zIndex: 400,
+            backgroundColor: "color-mix(in srgb, var(--bg) 85%, transparent)",
+            backdropFilter: "blur(4px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "var(--space-5)",
+          }}
+        >
+          <div style={{
+            maxWidth: "340px", textAlign: "center",
+            backgroundColor: "var(--bg-surface)", borderRadius: "16px",
+            padding: "var(--space-6)", border: "1px solid var(--border)",
+            boxShadow: "0 10px 40px rgba(0,0,0,0.18)",
+          }}>
+            <p style={{ fontFamily: "var(--font-heebo)", fontSize: "18px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "var(--space-4)", direction: "rtl" }}>
+              האם אתה עדיין עם הטקסט?
+            </p>
+            <p style={{ fontFamily: "var(--font-assistant)", fontSize: "13px", color: "var(--text-tertiary)", marginBottom: "var(--space-5)", lineHeight: 1.6 }}>
+              רגע קטן לבדוק — מה המשפט האחרון שקראת?
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)" }}>
+              <button
+                onClick={() => { setShowProbe(false); haptics.tap(); }}
+                style={{
+                  padding: "var(--space-3)", backgroundColor: "var(--accent)",
+                  color: "#fff", border: "none", borderRadius: "10px",
+                  fontFamily: "var(--font-heebo)", fontSize: "14px", fontWeight: 500,
+                  cursor: "pointer",
+                }}
+              >
+                עדיין עם זה
+              </button>
+              <button
+                onClick={() => {
+                  setShowProbe(false);
+                  // seek back a paragraph
+                  const el = containerRef.current;
+                  if (el) el.scrollTop = Math.max(0, el.scrollTop - 400);
+                  haptics.bump();
+                }}
+                style={{
+                  padding: "var(--space-3)", backgroundColor: "var(--bg-elevated)",
+                  color: "var(--text-primary)", border: "1px solid var(--border)",
+                  borderRadius: "10px", fontFamily: "var(--font-heebo)",
+                  fontSize: "14px", fontWeight: 500, cursor: "pointer",
+                }}
+              >
+                חזור אחורה
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

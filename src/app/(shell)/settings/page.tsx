@@ -30,6 +30,9 @@ export default function SettingsPage() {
   const reminderHour = useAppStore((s) => s.reminderHour);
   const uiLanguage = useAppStore((s) => s.uiLanguage);
   const analyticsOptOut = useAppStore((s) => s.analyticsOptOut);
+  const anthropicKey = useAppStore((s) => s.anthropicKey);
+  const mindWanderProbes = useAppStore((s) => s.mindWanderProbes);
+  const baselineWpm = useAppStore((s) => s.baselineWpm);
 
   const setTheme = useAppStore((s) => s.setTheme);
   const setFontFamily = useAppStore((s) => s.setFontFamily);
@@ -44,6 +47,8 @@ export default function SettingsPage() {
   const setReminderHour = useAppStore((s) => s.setReminderHour);
   const setUILanguage = useAppStore((s) => s.setUILanguage);
   const setAnalyticsOptOut = useAppStore((s) => s.setAnalyticsOptOut);
+  const setAnthropicKey = useAppStore((s) => s.setAnthropicKey);
+  const setMindWanderProbes = useAppStore((s) => s.setMindWanderProbes);
   const resetAll = useAppStore((s) => s.resetAll);
 
   // RSVP prefs
@@ -342,6 +347,19 @@ export default function SettingsPage() {
         </ActionRow>
       </Section>
 
+      {/* AI + Focus */}
+      <Section title="AI ומיקוד" icon={<IconInfo size={15} />}>
+        <ApiKeyRow value={anthropicKey} onChange={setAnthropicKey} />
+        <ToggleRow label="בדיקות מיקוד בקריאה"
+          sublabel='בקריאה רגילה: "האם עדיין איתך?"'
+          value={mindWanderProbes} onChange={setMindWanderProbes} />
+        <InfoRow label="מהירות בסיס" value={baselineWpm ? `${baselineWpm} מ״ד` : "לא נמדדה"} />
+        <ActionRow label="מדידת מהירות בסיס מחדש"
+          onClick={() => { window.location.href = "/onboarding"; }}>
+          <IconRefresh size={14} />
+        </ActionRow>
+      </Section>
+
       {/* Privacy */}
       <Section title="פרטיות" icon={<IconShield size={15} />}>
         <ToggleRow label="ביטול אנליטיקס"
@@ -428,6 +446,61 @@ function Section({ title, icon, children }: { title: string; icon?: React.ReactN
       }}>
         {children}
       </div>
+    </div>
+  );
+}
+
+function ApiKeyRow({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [shown, setShown] = useState(false);
+  const masked = value ? `•••••${value.slice(-4)}` : "";
+  return (
+    <div style={{
+      padding: "var(--space-4) var(--space-5)", borderBottom: "1px solid var(--border)",
+      display: "flex", flexDirection: "column", gap: "var(--space-2)",
+    }}>
+      <div>
+        <p style={labelStyle}>מפתח Anthropic (Claude)</p>
+        <p style={{ fontFamily: "var(--font-assistant)", fontSize: "12px", color: "var(--text-tertiary)", marginTop: "2px" }}>
+          נשמר מקומית בדפדפן; משמש ליצירת שאלות הבנה
+        </p>
+      </div>
+      {shown ? (
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="sk-ant-..."
+          dir="ltr"
+          style={{
+            fontFamily: "var(--font-mono)", fontSize: "12px",
+            color: "var(--text-primary)", backgroundColor: "var(--bg-elevated)",
+            border: "1px solid var(--border)", borderRadius: "8px",
+            padding: "var(--space-2) var(--space-3)", outline: "none",
+            direction: "ltr",
+          }}
+        />
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+          <span style={{
+            fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-tertiary)",
+            flex: 1, padding: "var(--space-2) var(--space-3)",
+            backgroundColor: "var(--bg-elevated)", borderRadius: "8px",
+            border: "1px solid var(--border)", direction: "ltr",
+          }}>
+            {masked || "לא הוגדר"}
+          </span>
+          <button
+            onClick={() => setShown(true)}
+            style={{
+              padding: "6px 12px", border: "1px solid var(--border)",
+              borderRadius: "8px", backgroundColor: "var(--bg-surface)",
+              fontFamily: "var(--font-assistant)", fontSize: "12px",
+              color: "var(--accent)", cursor: "pointer",
+            }}
+          >
+            {value ? "שנה" : "הוסף"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
