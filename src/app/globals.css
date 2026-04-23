@@ -327,3 +327,27 @@ body {
 .rsvp-context--after {
   inset-inline-start: calc(100% + var(--space-6));
 }
+
+/* ── Light mode class override ── */
+.light {
+  --bg: var(--parchment-50);
+  --bg-surface: var(--parchment-100);
+  --bg-elevated: var(--parchment-200);
+  --border: var(--parchment-200);
+  --text-primary: var(--ink-900);
+  --text-secondary: var(--ink-700);
+  --text-tertiary: var(--ink-500);
+  --accent: var(--tekhelet-500);
+  --accent-hover: var(--tekhelet-600);
+  --accent-subtle: var(--tekhelet-400);
+}
+
+/* ── Mobile: prevent tap flash on buttons ── */
+button, a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── RSVP stage: account for bottom nav when inside shell ── */
+.rsvp-stage {
+  padding-bottom: calc(6vh + 56px + env(safe-area-inset-bottom, 0px));
+}

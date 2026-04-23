@@ -23,7 +23,10 @@ type UseRsvpEngineReturn = {
  * is stored in state to minimize re-renders.
  */
 export function useRsvpEngine(tokens: Token[]): UseRsvpEngineReturn {
-  const { wpm, chunkSize, adaptivePauses, setWpm: storeSetWpm } = useRsvpStore();
+  const wpm = useRsvpStore((s) => s.wpm);
+  const chunkSize = useRsvpStore((s) => s.chunkSize);
+  const adaptivePauses = useRsvpStore((s) => s.adaptivePauses);
+  const storeSetWpm = useRsvpStore((s) => s.setWpm);
 
   const engineRef = useRef<RsvpEngine | null>(null);
   const [currentFrame, setCurrentFrame] = useState<RsvpFrame | null>(null);

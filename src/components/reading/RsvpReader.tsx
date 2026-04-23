@@ -21,11 +21,9 @@ type Props = {
  * - No chrome while playing; controls fade in on hover/pause
  */
 export function RsvpReader({ passage, onComplete }: Props) {
-  const { wpm, setWpm, chunkSize } = useRsvpStore((s) => ({
-    wpm: s.wpm,
-    setWpm: s.setWpm,
-    chunkSize: s.chunkSize,
-  }));
+  const wpm = useRsvpStore((s) => s.wpm);
+  const setWpm = useRsvpStore((s) => s.setWpm);
+  const chunkSize = useRsvpStore((s) => s.chunkSize);
 
   const { currentFrame, isPlaying, progress, isComplete, play, pause, toggle, seekBack } =
     useRsvpEngine(passage.tokens);

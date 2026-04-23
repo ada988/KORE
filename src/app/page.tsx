@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "קוֹרֵא — KORÉ",
@@ -114,8 +115,8 @@ export default function HomePage() {
           justifyContent: "center",
         }}
       >
-        <a
-          href="/auth/signup"
+        <Link
+          href="/read"
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -133,10 +134,10 @@ export default function HomePage() {
           }}
           lang="he"
         >
-          התחל בחינם
-        </a>
-        <a
-          href="/auth/login"
+          התחל לקרוא
+        </Link>
+        <Link
+          href="/home"
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -150,13 +151,12 @@ export default function HomePage() {
             borderRadius: "8px",
             border: "1px solid var(--border)",
             textDecoration: "none",
-            transition: `border-color var(--duration-quick) var(--ease-ui), color var(--duration-quick) var(--ease-ui)`,
             direction: "rtl",
           }}
           lang="he"
         >
-          כניסה
-        </a>
+          פתח את האפליקציה
+        </Link>
       </div>
 
       {/* Build status */}

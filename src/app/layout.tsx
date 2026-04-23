@@ -89,6 +89,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -103,6 +104,18 @@ export default function RootLayout({
       className={`${fontVariables} h-full antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        {/* Restore client-side route after GitHub Pages 404 redirect */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          (function(l){
+            if(l.search[1]==='/'){
+              var d=l.search.slice(1).split('&').map(function(s){return s.replace(/~and~/g,'&')});
+              window.history.replaceState(null,null,
+                l.pathname.slice(0,-1)+d[0]+(d.slice(1).join('&')?'?'+d.slice(1).join('&'):'')+l.hash);
+            }
+          }(window.location))
+        `}} />
+      </head>
       <body
         className="min-h-full flex flex-col"
         style={{ fontFamily: "var(--font-heebo)" }}
