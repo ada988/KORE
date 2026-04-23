@@ -491,7 +491,9 @@ function PassageRow({
 
   const share = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const url = `${window.location.origin}/read/${passage.id}`;
+    // Preserve any basePath (e.g. /KORE) from the current pathname
+    const pathPrefix = window.location.pathname.split("/read")[0] ?? "";
+    const url = `${window.location.origin}${pathPrefix}/read/${passage.id}`;
     if (navigator.share) {
       try { await navigator.share({ title: passage.title, url }); } catch { /* user cancelled */ }
     } else {
