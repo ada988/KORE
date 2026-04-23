@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { DEMO_PASSAGES } from "@/lib/demo-passages";
 import { getStreak, getDailyStats, getRecentSessions } from "@/lib/session-utils";
 import { useAppStore } from "@/stores/app";
@@ -11,15 +12,16 @@ import type { Streak, DailyStats, ReadingSession } from "@/types/database";
 export default function HomePage() {
   const dailyGoal = useAppStore((s) => s.dailyGoalMinutes);
   const onboarded = useAppStore((s) => s.onboarded);
+  const router = useRouter();
   const [streak, setStreak] = useState<Streak | null>(null);
   const [todayStats, setTodayStats] = useState<DailyStats | null>(null);
   const [lastSession, setLastSession] = useState<ReadingSession | null>(null);
 
   useEffect(() => {
-    if (!onboarded && typeof window !== "undefined") {
-      window.location.href = "/onboarding";
+    if (!onboarded) {
+      router.replace("/onboarding");
     }
-  }, [onboarded]);
+  }, [onboarded, router]);
 
   const load = useCallback(async () => {
     const [s, stats, sessions] = await Promise.all([

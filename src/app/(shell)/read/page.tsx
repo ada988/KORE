@@ -447,6 +447,7 @@ export default function ReadPage() {
             key={p.id}
             passage={p}
             onClick={() => router.push(`/read/${p.id}`)}
+            onHistory={() => router.push(`/passages/${p.id}/history`)}
             onDelete={p._kind === "saved" ? async () => {
               await deletePassage(p.id);
               haptics.bump();
@@ -469,11 +470,12 @@ export default function ReadPage() {
 }
 
 function PassageRow({
-  passage, onClick, onDelete,
+  passage, onClick, onDelete, onHistory,
 }: {
   passage: { id: string; title: string; author?: string | undefined; word_count: number; difficulty_band: string; domain: string; _kind: "library" | "saved" };
   onClick: () => void;
   onDelete?: (() => void) | undefined;
+  onHistory: () => void;
 }) {
   const [bookmarked, setBookmarked] = useState(false);
   useEffect(() => { setBookmarked(getBookmark(passage.id) !== null); }, [passage.id]);
@@ -544,7 +546,7 @@ function PassageRow({
       </div>
       <div style={{ display: "flex", gap: "var(--space-1)", alignItems: "center", marginInlineStart: "var(--space-2)" }}>
         <button
-          onClick={(e) => { e.stopPropagation(); window.location.href = `/passages/${passage.id}/history`; }}
+          onClick={(e) => { e.stopPropagation(); onHistory(); }}
           style={iconBtnInline} aria-label="היסטוריה"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

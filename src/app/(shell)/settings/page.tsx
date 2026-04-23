@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useAppStore, type Theme, type FontFamily, type ReaderAmbience, type UILanguage } from "@/stores/app";
 import { useRsvpStore, type SpeedMode } from "@/stores/rsvp";
 import type { OrpMode } from "@/engines/orp";
@@ -16,6 +17,7 @@ import {
 const APP_VERSION = "0.2.0";
 
 export default function SettingsPage() {
+  const router = useRouter();
   // App prefs
   const theme = useAppStore((s) => s.theme);
   const fontFamily = useAppStore((s) => s.fontFamily);
@@ -355,7 +357,7 @@ export default function SettingsPage() {
           value={mindWanderProbes} onChange={setMindWanderProbes} />
         <InfoRow label="מהירות בסיס" value={baselineWpm ? `${baselineWpm} מ״ד` : "לא נמדדה"} />
         <ActionRow label="מדידת מהירות בסיס מחדש"
-          onClick={() => { window.location.href = "/onboarding"; }}>
+          onClick={() => router.push("/onboarding")}>
           <IconRefresh size={14} />
         </ActionRow>
       </Section>
